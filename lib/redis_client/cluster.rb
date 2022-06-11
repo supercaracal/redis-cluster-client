@@ -17,7 +17,7 @@ class RedisClient
     end
 
     def inspect
-      @node.keys.join(' ')
+      @node.inspect
     end
 
     def call(*command, **kwargs, &block)
