@@ -55,7 +55,7 @@ class RedisClient
       end
 
       def inspect
-        @clients.keys.sort.join(' ')
+        @clients.keys.sort.to_s
       end
 
       def each(&block)
