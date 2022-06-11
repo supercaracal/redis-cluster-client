@@ -8,11 +8,10 @@ Gem::Specification.new do |s|
   s.homepage                          = 'https://github.com/redis-rb/redis-cluster-client'
   s.authors                           = %w[Taishi Kasuga]
   s.email                             = %w[proxy0721@gmail.com]
-  s.require_paths                     = %w[lib]
   s.required_ruby_version             = '>= 2.7.0'
   s.metadata['rubygems_mfa_required'] = 'true'
   s.metadata['allowed_push_host']     = 'https://rubygems.org'
-  s.files                             = Dir.glob(File.join('**', '*.rb'), base: File.join(File.expand_path(__dir__), 'lib'))
+  s.files                             = Dir['lib/**/*.rb']
 
-  s.add_runtime_dependency 'redis-client'
+  s.add_runtime_dependency 'redis-client', '~> 0.5'
 end
