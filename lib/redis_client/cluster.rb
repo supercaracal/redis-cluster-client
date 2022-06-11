@@ -16,6 +16,10 @@ class RedisClient
       @command = ::RedisClient::Cluster::Command.load(@node)
     end
 
+    def inspect
+      @node.node_keys.join(' ')
+    end
+
     def call(*command, **kwargs, &block)
       send_command(:call, *command, **kwargs, &block)
     end
@@ -70,7 +74,7 @@ class RedisClient
     alias then with
 
     def id
-      @node.map(&:id).sort.join(' ')
+      @node.flat_map(&:id).sort.join(' ')
     end
 
     def connected?

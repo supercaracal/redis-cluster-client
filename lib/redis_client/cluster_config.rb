@@ -26,6 +26,10 @@ class RedisClient
       super(**@client_config)
     end
 
+    def inspect
+      per_node_key.to_s
+    end
+
     def new_pool(size: 5, timeout: 5, **kwargs)
       ::RedisClient::Cluster.new(self, pool: { size: size, timeout: timeout }, **kwargs)
     end

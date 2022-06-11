@@ -47,11 +47,14 @@ class RedisClient
         end
       end
 
+      attr_reader :node_keys
+
       def initialize(options, node_info = [], pool = nil, with_replica: false, **kwargs)
         @clients = build_clients(options, pool, **kwargs)
         @slots = build_slot_node_mappings(node_info)
         @replications = build_replication_mappings(node_info)
         @with_replica = with_replica
+        @node_keys = node_info.flat_map { |info| info[:node_key] }.sort
       end
 
       def each(&block)
