@@ -30,7 +30,7 @@ class RedisClient
         private
 
         # @see https://redis.io/commands/cluster-nodes/
-        def parse_node_info(info) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        def parse_node_info(info) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Metrics/MethodLength
           rows = info.split("\n").map(&:split)
           rows.each { |arr| arr[2] = arr[2].split(',') }
           rows.select! { |arr| arr[7] == 'connected' && (arr[2] & %w[fail? fail handshake noaddr noflags]).empty? }
@@ -40,7 +40,10 @@ class RedisClient
             arr[8] = arr[8].nil? ? [] : arr[8].split(',').map { |r| r.split('-').map { |s| Integer(s) } }
           end
 
-          rows
+          rows.map do |arr|
+            { id: arr[0], node_key: arr[1], role: arr[2], primary_id: arr[3], ping_sent: arr[4],
+              pong_recv: arr[5], config_epoch: arr[6], link_state: arr[7], slots: arr[8] }
+          end
         end
       end
 
@@ -150,23 +153,21 @@ class RedisClient
 
       def build_slot_node_mappings(node_info)
         slots = Array.new(SLOT_SIZE)
-        node_info.each do |arr|
-          next if arr[8].nil? || arr[8].empty?
+        node_info.each do |info|
+          next if info[:slots].nil? || info[:slots].empty?
 
-          arr[8].each do |start, last|
-            (start..last).each { |i| slots[i] = arr[1] }
-          end
+          info[:slots].each { |start, last| (start..last).each { |i| slots[i] = info[:node_key] } }
         end
 
         slots
       end
 
       def build_replication_mappings(node_info)
-        dict = node_info.to_h { |arr| [arr[0], arr] }
-        node_info.each_with_object(Hash.new { |h, k| h[k] = [] }) do |arr, acc|
-          primary_info = dict[arr[3]]
-          acc[primary_info[1]] << arr[1] unless primary_info.nil?
-          acc[arr[1]]
+        dict = node_info.to_h { |info| [info[:id], info] }
+        node_info.each_with_object(Hash.new { |h, k| h[k] = [] }) do |info, acc|
+          primary_info = dict[info[:primary_id]]
+          acc[primary_info[:node_key]] << info[:node_key] unless primary_info.nil?
+          acc[info[:node_key]]
         end
       end
 
