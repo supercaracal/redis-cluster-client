@@ -78,7 +78,7 @@ class RedisClient
     end
 
     def close
-      @node.each(&:disconnect)
+      @node.each(&:close)
       true
     end
 
