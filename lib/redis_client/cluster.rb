@@ -295,7 +295,7 @@ class RedisClient
         @config.add_node(host, port)
       end
 
-      @node.map(&:disconnect)
+      @node.each(&:close)
       @node = fetch_cluster_info!(@config, @pool, **@client_kwargs)
     end
   end
