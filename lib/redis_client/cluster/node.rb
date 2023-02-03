@@ -144,10 +144,14 @@ class RedisClient
         def parse_cluster_node_reply(reply) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
           # This implementation is intentionally procedural for reducing memory allocation against massive cluster.
           nodes = Array.new(reply.count(CLUSTER_NODE_REPLY_DELIMITER))
+          fields = Array.new(9)
+          flags = Array.new(10)
 
           reply.each_line(CLUSTER_NODE_REPLY_DELIMITER, chomp: true) do |line|
-            fields = line.split(CLUSTER_NODE_REPLY_FIELD_DELIMITER)
-            flags = fields[2].split(CLUSTER_NODE_REPLY_FLAGS_DELIMITER)
+            fields.each_with_index { |_, j| fields[j] = nil }
+            flags.each_with_index { |_, j| flags[j] = nil }
+            line.each_line(CLUSTER_NODE_REPLY_FIELD_DELIMITER, chomp: true).with_index { |e, i| fields[i] = e }
+            flags = fields[2].each_line(CLUSTER_NODE_REPLY_FLAGS_DELIMITER, chomp: true).with_index { |e, i| flags[i] = e }
             next unless fields[7] == CLUSTER_NODE_LINK_STATE_CONNECTED && (flags & CLUSTER_NODE_DEAD_FLAGS).empty?
 
             slots = if fields[8].nil?
@@ -162,7 +166,7 @@ class RedisClient
 
             nodes << ::RedisClient::Cluster::Node::Info.new(
               id: fields[0],
-              node_key: fields[1].split(CLUSTER_NODE_REPLY_NODE_KEY_DELIMITER).first,
+              node_key: fields[1][0, fields[1].index(CLUSTER_NODE_REPLY_NODE_KEY_DELIMITER)],
               role: (flags & CLUSTER_NODE_ROLE_FLAGS).first,
               primary_id: fields[3],
               ping_sent: fields[4],
