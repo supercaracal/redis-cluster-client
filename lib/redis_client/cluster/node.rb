@@ -27,6 +27,7 @@ class RedisClient
       CLUSTER_NODE_ROLE_FLAGS = %w[master slave].freeze
       CLUSTER_NODE_SLOT_PREFIX_IN_RESHARDING = '['
       CLUSTER_NODE_SLOT_RANGE_DELIMITER = '-'
+      CLUSTER_NODE_EMPTY_SLOTS = [].freeze
 
       ReloadNeeded = Class.new(::RedisClient::Error)
 
@@ -145,41 +146,31 @@ class RedisClient
           nodes = Array.new(reply.count(CLUSTER_NODE_REPLY_DELIMITER))
 
           reply.each_line(CLUSTER_NODE_REPLY_DELIMITER, chomp: true) do |line|
-            fields = line.each_line(CLUSTER_NODE_REPLY_FIELD_DELIMITER, chomp: true)
-            id = fields.next
-            node_key = fields.next.each_line(CLUSTER_NODE_REPLY_NODE_KEY_DELIMITER, chomp: true).next
+            fields = line.split(CLUSTER_NODE_REPLY_FIELD_DELIMITER)
+            node_key = fields[1].split(CLUSTER_NODE_REPLY_NODE_KEY_DELIMITER).first
 
             role = nil
             is_dead = false
-            fields.next.each_line(CLUSTER_NODE_REPLY_FLAGS_DELIMITER, chomp: true) do |flag|
+            fields[2].split(CLUSTER_NODE_REPLY_FLAGS_DELIMITER).each do |flag|
               role = flag if CLUSTER_NODE_ROLE_FLAGS.include?(flag)
               is_dead = true if CLUSTER_NODE_DEAD_FLAGS.include?(flag)
             end
 
-            primary_id = fields.next
-            ping_sent = fields.next
-            pong_recv = fields.next
-            config_epoch = fields.next
-            link_state = fields.next
-            next if link_state != CLUSTER_NODE_LINK_STATE_CONNECTED || is_dead
+            next if fields[7] != CLUSTER_NODE_LINK_STATE_CONNECTED || is_dead
 
-            slots = []
-
-            loop do
-              slot = fields.next
-              next if slot.start_with?(CLUSTER_NODE_SLOT_PREFIX_IN_RESHARDING)
-
-              slots << slot.each_line(CLUSTER_NODE_SLOT_RANGE_DELIMITER, chomp: true)
-                           .map { |s| Integer(s) }
-                           .then { |a| a.size == 1 ? a << a.first : a }
-                           .then(&:sort)
-            rescue StopIteration
-              break
-            end
+            slots = if fields[8].nil?
+                      CLUSTER_NODE_EMPTY_SLOTS
+                    else
+                      fields[8..].split(CLUSTER_NODE_SLOT_RANGE_DELIMITER)
+                                 .filter_map { |s| s.start_with?(CLUSTER_NODE_SLOT_PREFIX_IN_RESHARDING) ? nil : s }
+                                 .map { |s| Integer(s) }
+                                 .then { |a| a.size == 1 ? a << a.first : a }
+                                 .then(&:sort)
+                    end
 
             nodes << ::RedisClient::Cluster::Node::Info.new(
-              id: id, node_key: node_key, role: role, primary_id: primary_id, ping_sent: ping_sent,
-              pong_recv: pong_recv, config_epoch: config_epoch, link_state: link_state, slots: slots
+              id: fields[0], node_key: node_key, role: role, primary_id: fields[3], ping_sent: fields[4],
+              pong_recv: fields[5], config_epoch: fields[6], link_state: fields[7], slots: slots
             )
           end
 
