@@ -158,7 +158,7 @@ class RedisClient
                       CLUSTER_NODE_EMPTY_SLOTS
                     else
                       fields[8..]
-                        .filter_map { |s| s.start_with?(CLUSTER_NODE_SLOT_PREFIX_IN_RESHARDING) ? nil : s }
+                        .filter_map { |s| !s.nil? && s.start_with?(CLUSTER_NODE_SLOT_PREFIX_IN_RESHARDING) ? nil : s }
                         .map { |s| s.split(CLUSTER_NODE_SLOT_RANGE_DELIMITER).map { |e| Integer(e) } }
                         .map { |a| a.size == 1 ? a << a.first : a }
                         .map(&:sort)
