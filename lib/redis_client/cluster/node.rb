@@ -18,6 +18,9 @@ class RedisClient
       MAX_STARTUP_SAMPLE = 37
       MAX_THREADS = Integer(ENV.fetch('REDIS_CLIENT_MAX_THREADS', 5))
       IGNORE_GENERIC_CONFIG_KEYS = %i[url host port path].freeze
+      DEAD_FLAGS = %w[fail? fail handshake noaddr noflags].freeze
+      ROLE_FLAGS = %w[master slave].freeze
+      EMPTY_ARRAY = [].freeze
 
       ReloadNeeded = Class.new(::RedisClient::Error)
 
@@ -132,26 +135,29 @@ class RedisClient
         # @see https://redis.io/commands/cluster-nodes/
         # @see https://github.com/redis/redis/blob/78960ad57b8a5e6af743d789ed8fd767e37d42b8/src/cluster.c#L4660-L4683
         def parse_cluster_node_reply(reply) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-          rows = reply.split("\n").map(&:split)
+          rows = reply.split("\n")
+          rows.map!(&:split)
           rows.each { |arr| arr[2] = arr[2].split(',') }
-          rows.select! { |arr| arr[7] == 'connected' && (arr[2] & %w[fail? fail handshake noaddr noflags]).empty? }
+          rows.select! { |arr| arr[7] == 'connected' && (arr[2] & DEAD_FLAGS).empty? }
           rows.each do |arr|
             arr[1] = arr[1].split('@').first
-            arr[2] = (arr[2] & %w[master slave]).first
+            arr[2] = (arr[2] & ROLE_FLAGS).first
             if arr[8].nil?
-              arr[8] = []
+              arr[8] = EMPTY_ARRAY
               next
             end
             arr[8] = arr[8..].filter_map { |str| str.start_with?('[') ? nil : str.split('-').map { |s| Integer(s) } }
                              .map { |a| a.size == 1 ? a << a.first : a }.map(&:sort)
           end
 
-          rows.map do |arr|
+          rows.map! do |arr|
             ::RedisClient::Cluster::Node::Info.new(
               id: arr[0], node_key: arr[1], role: arr[2], primary_id: arr[3], ping_sent: arr[4],
               pong_recv: arr[5], config_epoch: arr[6], link_state: arr[7], slots: arr[8]
             )
           end
+
+          rows
         end
       end
 
