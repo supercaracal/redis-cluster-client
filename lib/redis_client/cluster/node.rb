@@ -146,12 +146,23 @@ class RedisClient
           nodes = Array.new(reply.count(CLUSTER_NODE_REPLY_DELIMITER))
           fields = Array.new(9)
           flags = Array.new(10)
+          j = 0
 
           reply.each_line(CLUSTER_NODE_REPLY_DELIMITER, chomp: true) do |line|
             fields.each_with_index { |_, i| fields[i] = nil }
+            j = 0
+            line.each_line(CLUSTER_NODE_REPLY_FIELD_DELIMITER, chomp: true) do |e|
+              fields[j] = e
+              j += 1
+            end
+
             flags.each_with_index { |_, i| flags[i] = nil }
-            line.each_line(CLUSTER_NODE_REPLY_FIELD_DELIMITER, chomp: true).with_index { |e, i| fields[i] = e }
-            fields[2].each_line(CLUSTER_NODE_REPLY_FLAGS_DELIMITER, chomp: true).with_index { |e, i| flags[i] = e }
+            j = 0
+            fields[2].each_line(CLUSTER_NODE_REPLY_FLAGS_DELIMITER, chomp: true) do |e|
+              flags[j] = e
+              j += 1
+            end
+
             next unless fields[7] == CLUSTER_NODE_LINK_STATE_CONNECTED && (flags & CLUSTER_NODE_DEAD_FLAGS).empty?
 
             slots = if fields[8].nil?
