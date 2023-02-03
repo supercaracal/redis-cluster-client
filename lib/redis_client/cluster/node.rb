@@ -147,30 +147,29 @@ class RedisClient
 
           reply.each_line(CLUSTER_NODE_REPLY_DELIMITER, chomp: true) do |line|
             fields = line.split(CLUSTER_NODE_REPLY_FIELD_DELIMITER)
-            node_key = fields[1].split(CLUSTER_NODE_REPLY_NODE_KEY_DELIMITER).first
-
-            role = nil
-            is_dead = false
-            fields[2].split(CLUSTER_NODE_REPLY_FLAGS_DELIMITER).each do |flag|
-              role = flag if CLUSTER_NODE_ROLE_FLAGS.include?(flag)
-              is_dead = true if CLUSTER_NODE_DEAD_FLAGS.include?(flag)
-            end
-
-            next if fields[7] != CLUSTER_NODE_LINK_STATE_CONNECTED || is_dead
+            flags = fields[2].split(CLUSTER_NODE_REPLY_FLAGS_DELIMITER)
+            next unless fields[7] == CLUSTER_NODE_LINK_STATE_CONNECTED && (flags & CLUSTER_NODE_DEAD_FLAGS).empty?
 
             slots = if fields[8].nil?
                       CLUSTER_NODE_EMPTY_SLOTS
                     else
-                      fields[8..].split(CLUSTER_NODE_SLOT_RANGE_DELIMITER)
-                                 .filter_map { |s| s.start_with?(CLUSTER_NODE_SLOT_PREFIX_IN_RESHARDING) ? nil : s }
-                                 .map { |s| Integer(s) }
-                                 .then { |a| a.size == 1 ? a << a.first : a }
-                                 .then(&:sort)
+                      fields[8..]
+                        .filter_map { |s| s.start_with?(CLUSTER_NODE_SLOT_PREFIX_IN_RESHARDING) ? nil : s }
+                        .map { |s| s.split(CLUSTER_NODE_SLOT_RANGE_DELIMITER).map { |e| Integer(e) } }
+                        .map { |a| a.size == 1 ? a << a.first : a }
+                        .map(&:sort)
                     end
 
             nodes << ::RedisClient::Cluster::Node::Info.new(
-              id: fields[0], node_key: node_key, role: role, primary_id: fields[3], ping_sent: fields[4],
-              pong_recv: fields[5], config_epoch: fields[6], link_state: fields[7], slots: slots
+              id: fields[0],
+              node_key: fields[1].split(CLUSTER_NODE_REPLY_NODE_KEY_DELIMITER).first,
+              role: (flags & CLUSTER_NODE_ROLE_FLAGS).first,
+              primary_id: fields[3],
+              ping_sent: fields[4],
+              pong_recv: fields[5],
+              config_epoch: fields[6],
+              link_state: fields[7],
+              slots: slots
             )
           end
 
