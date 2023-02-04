@@ -137,7 +137,7 @@ class RedisClient
         def parse_cluster_node_reply(reply) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
           info_list = Array.new(reply.count("\n"))
 
-          reply.each_lines("\n", chomp: true) do |line|
+          reply.each_line("\n", chomp: true) do |line|
             fields = line.split
             flags = fields[2].split(',')
             next unless fields[7] == 'connected' && (flags & DEAD_FLAGS).empty?
