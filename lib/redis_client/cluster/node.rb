@@ -135,29 +135,36 @@ class RedisClient
         # @see https://redis.io/commands/cluster-nodes/
         # @see https://github.com/redis/redis/blob/78960ad57b8a5e6af743d789ed8fd767e37d42b8/src/cluster.c#L4660-L4683
         def parse_cluster_node_reply(reply) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-          rows = reply.split("\n")
-          rows.map!(&:split)
-          rows.each { |arr| arr[2] = arr[2].split(',') }
-          rows.select! { |arr| arr[7] == 'connected' && (arr[2] & DEAD_FLAGS).empty? }
-          rows.each do |arr|
-            arr[1] = arr[1].split('@').first
-            arr[2] = (arr[2] & ROLE_FLAGS).first
-            if arr[8].nil?
-              arr[8] = EMPTY_ARRAY
-              next
-            end
-            arr[8] = arr[8..].filter_map { |str| str.start_with?('[') ? nil : str.split('-').map { |s| Integer(s) } }
-                             .map { |a| a.size == 1 ? a << a.first : a }.map(&:sort)
-          end
+          info_list = Array.new(reply.count("\n"))
 
-          rows.map! do |arr|
-            ::RedisClient::Cluster::Node::Info.new(
-              id: arr[0], node_key: arr[1], role: arr[2], primary_id: arr[3], ping_sent: arr[4],
-              pong_recv: arr[5], config_epoch: arr[6], link_state: arr[7], slots: arr[8]
+          reply.each_lines("\n", chomp: true) do |line|
+            fields = line.split
+            flags = fields[2].split(',')
+            next unless fields[7] == 'connected' && (flags & DEAD_FLAGS).empty?
+
+            slots = if fields[8].nil?
+                      EMPTY_ARRAY
+                    else
+                      fields[8..].reject { |str| str.start_with?('[') }
+                                 .map { |str| str.split('-').map { |s| Integer(s) } }
+                                 .map { |a| a.size == 1 ? a << a.first : a }
+                                 .map(&:sort)
+                    end
+
+            info_list << ::RedisClient::Cluster::Node::Info.new(
+              id: fields[0],
+              node_key: fields[1].split('@').first,
+              role: (flags[2] & ROLE_FLAGS).first,
+              primary_id: fields[3],
+              ping_sent: fields[4],
+              pong_recv: fields[5],
+              config_epoch: fields[6],
+              link_state: fields[7],
+              slots: slots
             )
           end
 
-          rows
+          info_list.compact
         end
       end
 
