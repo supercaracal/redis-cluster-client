@@ -152,7 +152,7 @@ class RedisClient
             acc << ::RedisClient::Cluster::Node::Info.new(
               id: fields[0],
               node_key: fields[1].split('@').first,
-              role: (flags[2] & ROLE_FLAGS).first,
+              role: (flags & ROLE_FLAGS).first,
               primary_id: fields[3],
               ping_sent: fields[4],
               pong_recv: fields[5],
