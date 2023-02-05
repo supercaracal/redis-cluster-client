@@ -135,7 +135,7 @@ class RedisClient
         # @see https://redis.io/commands/cluster-nodes/
         # @see https://github.com/redis/redis/blob/78960ad57b8a5e6af743d789ed8fd767e37d42b8/src/cluster.c#L4660-L4683
         def parse_cluster_node_reply(reply) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-          reply.each_line("\n", chomp: true).lazy.filter_map do |line|
+          reply.each_line("\n", chomp: true).filter_map do |line|
             fields = line.split
             flags = fields[2].split(',')
             next unless fields[7] == 'connected' && (flags & DEAD_FLAGS).empty?
@@ -160,7 +160,7 @@ class RedisClient
               link_state: fields[7],
               slots: slots
             )
-          end.force
+          end
         end
       end
 
