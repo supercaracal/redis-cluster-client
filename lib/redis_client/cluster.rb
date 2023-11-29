@@ -4,7 +4,7 @@ require 'redis_client/cluster/concurrent_worker'
 require 'redis_client/cluster/pipeline'
 require 'redis_client/cluster/pub_sub'
 require 'redis_client/cluster/router'
-require 'redis_client/cluster/transaction'
+require 'redis_client/cluster/transaction' # TODO: remove
 
 class RedisClient
   class Cluster
@@ -89,12 +89,29 @@ class RedisClient
       pipeline.execute
     end
 
-    def multi(watch: nil, &block)
-      ::RedisClient::Cluster::Transaction.new(@router, @command_builder).execute(watch: watch, &block)
+    # Since Redis cluster is sharded by key, the client needs to know the key for selecting the node.
+    #
+    # @param watch [Array<String>] the watch list of keys
+    # @param key [String] the representative key or hashtag
+    def multi(watch: nil, key: nil, &block)
+      raise ArgumentError, 'watch or key must be provided' if (watch.nil? || watch.empty?) && (key.nil? || key.empty?)
+
+      key = !key.nil? ? key : watch.first
+      node_key = @router.find_node_key_by_key(key)
+      @router.find_node(node_key).multi(watch: watch, &block)
     end
 
     def pubsub
       ::RedisClient::Cluster::PubSub.new(@router, @command_builder)
+    end
+
+    # You have a responsibility that your command should be affected to the same node.
+    # It is failed with an error if you call commands which affect multiple nodes.
+    def with(key:, write: true, retry_count: 0, &block)
+      raise ArgumentError, 'key must be provided' if key.nil? || key.empty?
+
+      node_key = @router.find_node_key_by_key(key, write: write)
+      @router.find_node(node_key).with(retry_count: retry_count, &block)
     end
 
     def close

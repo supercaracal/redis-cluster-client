@@ -181,6 +181,16 @@ class RedisClient
         end
       end
 
+      def find_node_key_by_key(key, write: true)
+        slot = key.empty? ? nil : ::RedisClient::Cluster::KeySlotConverter.convert(key)
+
+        if write
+          @node.find_node_key_of_primary(slot) || @node.any_primary_node_key
+        else
+          @node.find_node_key_of_replica(slot) || @node.any_replica_node_key
+        end
+      end
+
       def find_primary_node_key(command)
         key = @command.extract_first_key(command)
         slot = key.empty? ? nil : ::RedisClient::Cluster::KeySlotConverter.convert(key)
