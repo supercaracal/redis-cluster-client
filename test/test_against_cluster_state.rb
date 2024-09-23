@@ -167,7 +167,7 @@ module TestAgainstClusterState
 
       refute(@redirection_count.zero?, @redirection_count.get)
 
-      @client.multi(watch: keys) do |tx|
+      @client.multi(watch: resharded_keys) do |tx|
         call_cnt += 1
         resharded_keys.each do |key|
           tx.call('SET', key, '0')
