@@ -11,16 +11,18 @@ class TestAgainstClusterScale < TestingWrapper
 
   def setup
     @captured_commands = ::Middlewares::CommandCapture::CommandBuffer.new
+    @redirection_count = ::Middlewares::RedirectionCount::Counter.new
     @client = ::RedisClient.cluster(
       nodes: TEST_NODE_URIS,
       replica: true,
       fixed_hostname: TEST_FIXED_HOSTNAME,
-      custom: { captured_commands: @captured_commands },
-      middlewares: [::Middlewares::CommandCapture],
+      custom: { captured_commands: @captured_commands, redirection_count: @redirection_count },
+      middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectionCount],
       **TEST_GENERIC_OPTIONS
     ).new_client
     @client.call('echo', 'init')
     @captured_commands.clear
+    @redirection_count.clear
   end
 
   def teardown
@@ -47,6 +49,8 @@ class TestAgainstClusterScale < TestingWrapper
                  .size
     assert_equal(want, got, 'Case: number of nodes')
     refute(@captured_commands.count('cluster', 'nodes').zero?, @captured_commands.to_a.map(&:command))
+    p @redirection_count.get
+    p @captured_commands.count('cluster', 'nodes')
   end
 
   def test_02_scale_in
@@ -70,6 +74,8 @@ class TestAgainstClusterScale < TestingWrapper
                  .size
     assert_equal(want, got, 'Case: number of nodes')
     refute(@captured_commands.count('cluster', 'nodes').zero?, @captured_commands.to_a.map(&:command))
+    p @redirection_count.get
+    p @captured_commands.count('cluster', 'nodes')
   end
 
   private
