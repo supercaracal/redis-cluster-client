@@ -47,7 +47,9 @@ module TestAgainstClusterState
     end
 
     def test_the_state_of_cluster_resharding
+      resharded_keys = nil
       do_resharding_test do |keys|
+        resharded_keys = keys
         keys.each do |key|
           want = key
           got = @client.call('GET', key)
@@ -56,12 +58,20 @@ module TestAgainstClusterState
       end
 
       refute(@redirection_count.zero?, @redirection_count.get)
+      resharded_keys.each do |key|
+        want = key
+        got = @client.call('GET', key)
+        assert_equal(want, got, "Case: GET: #{key}")
+      end
+
       p @redirection_count.get
       p @captured_commands.count('cluster', 'nodes')
     end
 
     def test_the_state_of_cluster_resharding_with_pipelining
+      resharded_keys = nil
       do_resharding_test do |keys|
+        resharded_keys = keys
         values = @client.pipelined do |pipeline|
           keys.each { |key| pipeline.call('GET', key) }
         end
@@ -71,6 +81,16 @@ module TestAgainstClusterState
           got = values[i]
           assert_equal(want, got, "Case: GET: #{key}")
         end
+      end
+
+      values = @client.pipelined do |pipeline|
+        resharded_keys.each { |key| pipeline.call('GET', key) }
+      end
+
+      resharded_keys.each_with_index do |key, i|
+        want = key
+        got = values[i]
+        assert_equal(want, got, "Case: GET: #{key}")
       end
 
       # Since redirections are handled by #call_pipelined_aware_of_redirection,
@@ -83,8 +103,10 @@ module TestAgainstClusterState
 
     def test_the_state_of_cluster_resharding_with_transaction
       call_cnt = 0
+      resharded_keys = nil
 
       do_resharding_test do |keys|
+        resharded_keys = keys
         @client.multi do |tx|
           call_cnt += 1
           keys.each do |key|
@@ -100,16 +122,34 @@ module TestAgainstClusterState
         end
       end
 
-      assert_equal(1, call_cnt)
       refute(@redirection_count.zero?, @redirection_count.get)
+
+      @client.multi do |tx|
+        call_cnt += 1
+        resharded_keys.each do |key|
+          tx.call('SET', key, '0')
+          tx.call('INCR', key)
+        end
+      end
+
+      resharded_keys.each do |key|
+        want = '2'
+        got = @client.call('GET', key)
+        assert_equal(want, got, "Case: GET: #{key}")
+      end
+
+      assert_equal(2, call_cnt)
+
       p @redirection_count.get
       p @captured_commands.count('cluster', 'nodes')
     end
 
     def test_the_state_of_cluster_resharding_with_transaction_and_watch
       call_cnt = 0
+      resharded_keys = nil
 
       do_resharding_test do |keys|
+        resharded_keys = keys
         @client.multi(watch: keys) do |tx|
           call_cnt += 1
           keys.each do |key|
@@ -125,8 +165,24 @@ module TestAgainstClusterState
         end
       end
 
-      assert_equal(1, call_cnt)
       refute(@redirection_count.zero?, @redirection_count.get)
+
+      @client.multi(watch: keys) do |tx|
+        call_cnt += 1
+        resharded_keys.each do |key|
+          tx.call('SET', key, '0')
+          tx.call('INCR', key)
+        end
+      end
+
+      resharded_keys.each do |key|
+        want = '2'
+        got = @client.call('GET', key)
+        assert_equal(want, got, "Case: GET: #{key}")
+      end
+
+      assert_equal(2, call_cnt)
+
       p @redirection_count.get
       p @captured_commands.count('cluster', 'nodes')
     end
