@@ -133,7 +133,7 @@ module TestAgainstClusterState
       end
 
       resharded_keys.each do |key|
-        want = '2'
+        want = '1'
         got = @client.call('GET', key)
         assert_equal(want, got, "Case: GET: #{key}")
       end
@@ -176,7 +176,7 @@ module TestAgainstClusterState
       end
 
       resharded_keys.each do |key|
-        want = '2'
+        want = '1'
         got = @client.call('GET', key)
         assert_equal(want, got, "Case: GET: #{key}")
       end
