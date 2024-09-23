@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 module Middlewares
-  module RedirectionEmulation
+  module RedirectFake
     Setting = Struct.new(
-      'RedirectionEmulationMiddlewareSetting',
+      'RedirectFakeSetting',
       :slot, :to, :command, keyword_init: true
     )
 

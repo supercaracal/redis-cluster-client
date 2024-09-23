@@ -15,11 +15,11 @@ module TestAgainstClusterState
       )
       @controller.rebuild
       @captured_commands = ::Middlewares::CommandCapture::CommandBuffer.new
-      @redirection_count = ::Middlewares::RedirectionCount::Counter.new
+      @redirect_count = ::Middlewares::RedirectCount::Counter.new
       @client = new_test_client
       @client.call('echo', 'init')
       @captured_commands.clear
-      @redirection_count.clear
+      @redirect_count.clear
     end
 
     def teardown
@@ -31,7 +31,7 @@ module TestAgainstClusterState
       @controller.down
       assert_raises(::RedisClient::CommandError) { @client.call('SET', 'key1', 1) }
       assert_equal('fail', fetch_cluster_info('cluster_state'))
-      p @redirection_count.get
+      p @redirect_count.get
       p @captured_commands.count('cluster', 'nodes')
     end
 
@@ -41,8 +41,8 @@ module TestAgainstClusterState
       wait_for_replication
       1000.times { |i| assert_equal(i.to_s, @client.call('GET', "key#{i}")) }
       assert_equal('ok', fetch_cluster_info('cluster_state'))
-      refute(@redirection_count.zero?, @redirection_count.get)
-      p @redirection_count.get
+      refute(@redirect_count.zero?, @redirect_count.get)
+      p @redirect_count.get
       p @captured_commands.count('cluster', 'nodes')
     end
 
@@ -57,14 +57,14 @@ module TestAgainstClusterState
         end
       end
 
-      refute(@redirection_count.zero?, @redirection_count.get)
+      refute(@redirect_count.zero?, @redirect_count.get)
       resharded_keys.each do |key|
         want = key
         got = @client.call('GET', key)
         assert_equal(want, got, "Case: GET: #{key}")
       end
 
-      p @redirection_count.get
+      p @redirect_count.get
       p @captured_commands.count('cluster', 'nodes')
     end
 
@@ -96,8 +96,8 @@ module TestAgainstClusterState
       # Since redirections are handled by #call_pipelined_aware_of_redirection,
       # we can't trace them in pipelining processes.
       #
-      # refute(@redirection_count.zero?, @redirection_count.get)
-      p @redirection_count.get
+      # refute(@redirect_count.zero?, @redirect_count.get)
+      p @redirect_count.get
       p @captured_commands.count('cluster', 'nodes')
     end
 
@@ -122,7 +122,7 @@ module TestAgainstClusterState
         end
       end
 
-      refute(@redirection_count.zero?, @redirection_count.get)
+      refute(@redirect_count.zero?, @redirect_count.get)
 
       @client.multi do |tx|
         call_cnt += 1
@@ -140,7 +140,7 @@ module TestAgainstClusterState
 
       assert_equal(2, call_cnt)
 
-      p @redirection_count.get
+      p @redirect_count.get
       p @captured_commands.count('cluster', 'nodes')
     end
 
@@ -165,7 +165,7 @@ module TestAgainstClusterState
         end
       end
 
-      refute(@redirection_count.zero?, @redirection_count.get)
+      refute(@redirect_count.zero?, @redirect_count.get)
 
       @client.multi(watch: resharded_keys) do |tx|
         call_cnt += 1
@@ -183,7 +183,7 @@ module TestAgainstClusterState
 
       assert_equal(2, call_cnt)
 
-      p @redirection_count.get
+      p @redirect_count.get
       p @captured_commands.count('cluster', 'nodes')
     end
 
@@ -212,8 +212,8 @@ module TestAgainstClusterState
       assert_equal(2, call_cnt)
       # The second call succeeded
       assert_equal('@client_value_2', @client.call('GET', 'watch_key'))
-      refute(@redirection_count.zero?, @redirection_count.get)
-      p @redirection_count.get
+      refute(@redirect_count.zero?, @redirect_count.get)
+      p @redirect_count.get
       p @captured_commands.count('cluster', 'nodes')
     ensure
       client2&.close
@@ -243,7 +243,7 @@ module TestAgainstClusterState
         assert_equal("value#{i}", @client.call_v(['GET', "key#{i}"]))
       end
 
-      p @redirection_count.get
+      p @redirect_count.get
       p @captured_commands.count('cluster', 'nodes')
     end
 
@@ -285,8 +285,8 @@ module TestAgainstClusterState
       private
 
       def new_test_client(
-        custom: { captured_commands: @captured_commands, redirection_count: @redirection_count },
-        middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectionCount],
+        custom: { captured_commands: @captured_commands, redirect_count: @redirect_count },
+        middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectCount],
         **opts
       )
         ::RedisClient.cluster(
@@ -308,8 +308,8 @@ module TestAgainstClusterState
       private
 
       def new_test_client(
-        custom: { captured_commands: @captured_commands, redirection_count: @redirection_count },
-        middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectionCount],
+        custom: { captured_commands: @captured_commands, redirect_count: @redirect_count },
+        middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectCount],
         **opts
       )
         ::RedisClient.cluster(
@@ -331,8 +331,8 @@ module TestAgainstClusterState
       private
 
       def new_test_client(
-        custom: { captured_commands: @captured_commands, redirection_count: @redirection_count },
-        middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectionCount],
+        custom: { captured_commands: @captured_commands, redirect_count: @redirect_count },
+        middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectCount],
         **opts
       )
         ::RedisClient.cluster(
@@ -356,8 +356,8 @@ module TestAgainstClusterState
       private
 
       def new_test_client(
-        custom: { captured_commands: @captured_commands, redirection_count: @redirection_count },
-        middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectionCount],
+        custom: { captured_commands: @captured_commands, redirect_count: @redirect_count },
+        middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectCount],
         **opts
       )
         ::RedisClient.cluster(
@@ -381,8 +381,8 @@ module TestAgainstClusterState
       private
 
       def new_test_client(
-        custom: { captured_commands: @captured_commands, redirection_count: @redirection_count },
-        middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectionCount],
+        custom: { captured_commands: @captured_commands, redirect_count: @redirect_count },
+        middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectCount],
         **opts
       )
         ::RedisClient.cluster(

@@ -7,13 +7,13 @@ class TestAgainstClusterBroken < TestingWrapper
 
   def setup
     @captured_commands = ::Middlewares::CommandCapture::CommandBuffer.new
-    @redirection_count = ::Middlewares::RedirectionCount::Counter.new
+    @redirect_count = ::Middlewares::RedirectCount::Counter.new
     @client = ::RedisClient.cluster(
       nodes: TEST_NODE_URIS,
       replica: true,
       fixed_hostname: TEST_FIXED_HOSTNAME,
-      custom: { captured_commands: @captured_commands, redirection_count: @redirection_count },
-      middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectionCount],
+      custom: { captured_commands: @captured_commands, redirect_count: @redirect_count },
+      middlewares: [::Middlewares::CommandCapture, ::Middlewares::RedirectCount],
       **TEST_GENERIC_OPTIONS
     ).new_client
     @client.call('echo', 'init')
@@ -23,7 +23,7 @@ class TestAgainstClusterBroken < TestingWrapper
       **TEST_GENERIC_OPTIONS.merge(timeout: 30.0)
     )
     @captured_commands.clear
-    @redirection_count.clear
+    @redirect_count.clear
   end
 
   def teardown
@@ -35,7 +35,7 @@ class TestAgainstClusterBroken < TestingWrapper
     sacrifice = @controller.select_sacrifice_of_replica
     do_test_a_node_is_down(sacrifice, number_of_keys: 10)
     refute(@captured_commands.count('cluster', 'nodes').zero?, @captured_commands.to_a.map(&:command))
-    p @redirection_count.get
+    p @redirect_count.get
     p @captured_commands.count('cluster', 'nodes')
   end
 
@@ -43,7 +43,7 @@ class TestAgainstClusterBroken < TestingWrapper
     sacrifice = @controller.select_sacrifice_of_primary
     do_test_a_node_is_down(sacrifice, number_of_keys: 10)
     refute(@captured_commands.count('cluster', 'nodes').zero?, @captured_commands.to_a.map(&:command))
-    p @redirection_count.get
+    p @redirect_count.get
     p @captured_commands.count('cluster', 'nodes')
   end
 
