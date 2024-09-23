@@ -853,7 +853,7 @@ class RedisClient
             ::Middlewares::RedirectFake
           ],
           custom: {
-            redirect: ::Middlewares::RedirectFake::Setting.new(
+            redirect_fake: ::Middlewares::RedirectFake::Setting.new(
               slot: slot, to: broken_primary_key, command: %w[SET testkey client2]
             )
           }

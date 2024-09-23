@@ -23,6 +23,7 @@ class RedisClient
       ROLE_FLAGS = %w[master slave].freeze
       EMPTY_ARRAY = [].freeze
       EMPTY_HASH = {}.freeze
+      STATE_REFRESH_INTERVAL = (3..10).freeze
 
       private_constant :USE_CHAR_ARRAY_SLOT, :SLOT_SIZE, :MIN_SLOT, :MAX_SLOT,
                        :DEAD_FLAGS, :ROLE_FLAGS, :EMPTY_ARRAY, :EMPTY_HASH
@@ -103,6 +104,7 @@ class RedisClient
         @config = config
         @mutex = Mutex.new
         @last_reloaded_at = nil
+        @reload_times = 0
         @random = Random.new
       end
 
@@ -424,15 +426,15 @@ class RedisClient
         @mutex.synchronize do
           return if @last_reloaded_at && @last_reloaded_at > wait_start
 
-          if @last_reloaded_at
-            # Mitigate load of servers by naive logic.
-            # Don't sleep with exponential backoff.
+          if @last_reloaded_at && @reload_times > 1
+            # Mitigate load of servers by naive logic. Don't sleep with exponential backoff.
             now = Process.clock_gettime(Process::CLOCK_MONOTONIC, :second)
-            return if now < @last_reloaded_at + @random.rand(5..15)
+            return if now < @last_reloaded_at + @random.rand(STATE_REFRESH_INTERVAL)
           end
 
           r = yield
           @last_reloaded_at = Process.clock_gettime(Process::CLOCK_MONOTONIC, :second)
+          @reload_times += 1
           r
         end
       end
