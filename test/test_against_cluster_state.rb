@@ -127,13 +127,13 @@ module TestAgainstClusterState
       @client.multi do |tx|
         call_cnt += 1
         resharded_keys.each do |key|
-          tx.call('SET', key, '0')
+          tx.call('SET', key, '2')
           tx.call('INCR', key)
         end
       end
 
       resharded_keys.each do |key|
-        want = '1'
+        want = '3'
         got = @client.call('GET', key)
         assert_equal(want, got, "Case: GET: #{key}")
       end
@@ -170,13 +170,13 @@ module TestAgainstClusterState
       @client.multi(watch: resharded_keys) do |tx|
         call_cnt += 1
         resharded_keys.each do |key|
-          tx.call('SET', key, '0')
+          tx.call('SET', key, '2')
           tx.call('INCR', key)
         end
       end
 
       resharded_keys.each do |key|
-        want = '1'
+        want = '3'
         got = @client.call('GET', key)
         assert_equal(want, got, "Case: GET: #{key}")
       end
