@@ -28,6 +28,7 @@ class TestAgainstClusterScale < TestingWrapper
   def teardown
     @client&.close
     @controller&.close
+    print "#{@redirect_count.get}, CLUSTER NODES: #{@captured_commands.count('cluster', 'nodes')}"
   end
 
   def test_01_scale_out
@@ -49,8 +50,6 @@ class TestAgainstClusterScale < TestingWrapper
                  .size
     assert_equal(want, got, 'Case: number of nodes')
     refute(@captured_commands.count('cluster', 'nodes').zero?, @captured_commands.to_a.map(&:command))
-    p @redirect_count.get
-    p @captured_commands.count('cluster', 'nodes')
   end
 
   def test_02_scale_in
@@ -74,8 +73,6 @@ class TestAgainstClusterScale < TestingWrapper
                  .size
     assert_equal(want, got, 'Case: number of nodes')
     refute(@captured_commands.count('cluster', 'nodes').zero?, @captured_commands.to_a.map(&:command))
-    p @redirect_count.get
-    p @captured_commands.count('cluster', 'nodes')
   end
 
   private

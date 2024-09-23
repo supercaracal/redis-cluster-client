@@ -25,14 +25,13 @@ module TestAgainstClusterState
     def teardown
       @controller&.close
       @client&.close
+      print "#{@redirect_count.get}, CLUSTER NODES: #{@captured_commands.count('cluster', 'nodes')}"
     end
 
     def test_the_state_of_cluster_down
       @controller.down
       assert_raises(::RedisClient::CommandError) { @client.call('SET', 'key1', 1) }
       assert_equal('fail', fetch_cluster_info('cluster_state'))
-      p @redirect_count.get
-      p @captured_commands.count('cluster', 'nodes')
     end
 
     def test_the_state_of_cluster_failover
@@ -42,8 +41,6 @@ module TestAgainstClusterState
       1000.times { |i| assert_equal(i.to_s, @client.call('GET', "key#{i}")) }
       assert_equal('ok', fetch_cluster_info('cluster_state'))
       refute(@redirect_count.zero?, @redirect_count.get)
-      p @redirect_count.get
-      p @captured_commands.count('cluster', 'nodes')
     end
 
     def test_the_state_of_cluster_resharding
@@ -63,9 +60,6 @@ module TestAgainstClusterState
         got = @client.call('GET', key)
         assert_equal(want, got, "Case: GET: #{key}")
       end
-
-      p @redirect_count.get
-      p @captured_commands.count('cluster', 'nodes')
     end
 
     def test_the_state_of_cluster_resharding_with_pipelining
@@ -97,8 +91,6 @@ module TestAgainstClusterState
       # we can't trace them in pipelining processes.
       #
       # refute(@redirect_count.zero?, @redirect_count.get)
-      p @redirect_count.get
-      p @captured_commands.count('cluster', 'nodes')
     end
 
     def test_the_state_of_cluster_resharding_with_transaction
@@ -139,9 +131,6 @@ module TestAgainstClusterState
       end
 
       assert_equal(2, call_cnt)
-
-      p @redirect_count.get
-      p @captured_commands.count('cluster', 'nodes')
     end
 
     def test_the_state_of_cluster_resharding_with_transaction_and_watch
@@ -182,9 +171,6 @@ module TestAgainstClusterState
       end
 
       assert_equal(2, call_cnt)
-
-      p @redirect_count.get
-      p @captured_commands.count('cluster', 'nodes')
     end
 
     def test_the_state_of_cluster_resharding_with_reexecuted_watch
@@ -213,8 +199,6 @@ module TestAgainstClusterState
       # The second call succeeded
       assert_equal('@client_value_2', @client.call('GET', 'watch_key'))
       refute(@redirect_count.zero?, @redirect_count.get)
-      p @redirect_count.get
-      p @captured_commands.count('cluster', 'nodes')
     ensure
       client2&.close
     end
@@ -242,9 +226,6 @@ module TestAgainstClusterState
         assert_equal('OK', res[i])
         assert_equal("value#{i}", @client.call_v(['GET', "key#{i}"]))
       end
-
-      p @redirect_count.get
-      p @captured_commands.count('cluster', 'nodes')
     end
 
     private

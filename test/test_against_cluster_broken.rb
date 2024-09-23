@@ -29,22 +29,19 @@ class TestAgainstClusterBroken < TestingWrapper
   def teardown
     @client&.close
     @controller&.close
+    print "#{@redirect_count.get}, CLUSTER NODES: #{@captured_commands.count('cluster', 'nodes')}"
   end
 
   def test_a_replica_is_down
     sacrifice = @controller.select_sacrifice_of_replica
     do_test_a_node_is_down(sacrifice, number_of_keys: 10)
     refute(@captured_commands.count('cluster', 'nodes').zero?, @captured_commands.to_a.map(&:command))
-    p @redirect_count.get
-    p @captured_commands.count('cluster', 'nodes')
   end
 
   def test_a_primary_is_down
     sacrifice = @controller.select_sacrifice_of_primary
     do_test_a_node_is_down(sacrifice, number_of_keys: 10)
     refute(@captured_commands.count('cluster', 'nodes').zero?, @captured_commands.to_a.map(&:command))
-    p @redirect_count.get
-    p @captured_commands.count('cluster', 'nodes')
   end
 
   private
