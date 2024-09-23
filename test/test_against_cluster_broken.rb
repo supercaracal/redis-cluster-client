@@ -29,7 +29,7 @@ class TestAgainstClusterBroken < TestingWrapper
   def teardown
     @client&.close
     @controller&.close
-    print "#{@redirect_count.get}, CLUSTER NODES: #{@captured_commands.count('cluster', 'nodes')} = "
+    print "#{@redirect_count.get}, ClusterNodesCall: #{@captured_commands.count('cluster', 'nodes')} = "
   end
 
   def test_a_replica_is_down
