@@ -3,6 +3,8 @@
 require 'testing_helper'
 
 module TestAgainstClusterScale
+  PATTERN = ENV.fetch('TEST_CLASS_PATTERN', '')
+
   module Mixin
     WAIT_SEC = 1
     MAX_ATTEMPTS = 20
