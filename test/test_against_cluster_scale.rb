@@ -48,7 +48,16 @@ module TestAgainstClusterScale
       primary_url, replica_url = build_additional_node_urls
       @controller.scale_out(primary_url: primary_url, replica_url: replica_url)
 
-      do_test_after_scale_out
+      do_test_after_scaled_out
+
+      want = (TEST_NODE_URIS + build_additional_node_urls).size
+      got = @client.instance_variable_get(:@router)
+                   .instance_variable_get(:@node)
+                   .instance_variable_get(:@topology)
+                   .instance_variable_get(:@clients)
+                   .size
+      assert_equal(want, got, 'Case: number of nodes')
+
       refute(@captured_commands.count('cluster', 'nodes').zero?, @captured_commands.to_a.map(&:command))
     end
 
@@ -57,6 +66,15 @@ module TestAgainstClusterScale
       @controller.scale_in
 
       do_test_after_scaled_in
+
+      want = TEST_NODE_URIS.size
+      got = @client.instance_variable_get(:@router)
+                   .instance_variable_get(:@node)
+                   .instance_variable_get(:@topology)
+                   .instance_variable_get(:@clients)
+                   .size
+      assert_equal(want, got, 'Case: number of nodes')
+
       refute(@captured_commands.count('cluster', 'nodes').zero?, @captured_commands.to_a.map(&:command))
     end
 
@@ -104,15 +122,9 @@ module TestAgainstClusterScale
       include Mixin
 
       def do_test_after_scaled_out
-        NUMBER_OF_KEYS.times { |i| assert_equal(i.to_s, @client.call('GET', "key#{i}"), "Case: key#{i}") }
-
-        want = (TEST_NODE_URIS + build_additional_node_urls).size
-        got = @client.instance_variable_get(:@router)
-                     .instance_variable_get(:@node)
-                     .instance_variable_get(:@topology)
-                     .instance_variable_get(:@clients)
-                     .size
-        assert_equal(want, got, 'Case: number of nodes')
+        NUMBER_OF_KEYS.times do |i|
+          assert_equal(i.to_s, @client.call('GET', "key#{i}"), "Case: key#{i}")
+        end
       end
 
       def do_test_after_scaled_in
@@ -120,14 +132,6 @@ module TestAgainstClusterScale
           got = retry_call(attempts: MAX_ATTEMPTS) { @client.call('GET', "key#{i}") }
           assert_equal(i.to_s, got, "Case: key#{i}")
         end
-
-        want = TEST_NODE_URIS.size
-        got = @client.instance_variable_get(:@router)
-                     .instance_variable_get(:@node)
-                     .instance_variable_get(:@topology)
-                     .instance_variable_get(:@clients)
-                     .size
-        assert_equal(want, got, 'Case: number of nodes')
       end
     end
   end
@@ -136,12 +140,27 @@ module TestAgainstClusterScale
     class Pipeline < TestingWrapper
       include Mixin
 
+      MAX_PIPELINE_SIZE = 40
+      SLICED_NUMBERS = (0...NUMBER_OF_KEYS).each_slice(MAX_PIPELINE_SIZE).freeze
+
       def do_test_after_scaled_out
-        # TODO: impl
+        SLICED_NUMBERS.each do |numbers|
+          got = @client.pipelined do |pi|
+            numbers.each { |i| pi.call('GET', "key#{i}") }
+          end
+
+          assert_equal(numbers.map(&:to_s), got, 'Case: GET')
+        end
       end
 
       def do_test_after_scaled_in
-        # TODO: impl
+        SLICED_NUMBERS.each do |numbers|
+          got = @client.pipelined do |pi|
+            numbers.each { |i| pi.call('GET', "key#{i}") }
+          end
+
+          assert_equal(numbers.map(&:to_s), got, 'Case: GET')
+        end
       end
     end
   end
