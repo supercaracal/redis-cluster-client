@@ -9,6 +9,8 @@ module TestAgainstClusterScale
     WAIT_SEC = 1
     MAX_ATTEMPTS = 20
     NUMBER_OF_KEYS = 20_000
+    MAX_PIPELINE_SIZE = 40
+    SLICED_NUMBERS = (0...NUMBER_OF_KEYS).each_slice(MAX_PIPELINE_SIZE).freeze
 
     def self.test_order
       :alpha
@@ -40,7 +42,12 @@ module TestAgainstClusterScale
     end
 
     def test_01_scale_out
-      @client.pipelined { |pi| NUMBER_OF_KEYS.times { |i| pi.call('SET', "key#{i}", i) } }
+      SLICED_NUMBERS.each do |numbers|
+        @client.pipelined do |pi|
+          numbers.each { |i| pi.call('SET', "key#{i}", i) }
+        end
+      end
+
       wait_for_replication
 
       primary_url, replica_url = build_additional_node_urls
@@ -138,9 +145,6 @@ module TestAgainstClusterScale
   if PATTERN == 'Pipeline' || PATTERN.empty?
     class Pipeline < TestingWrapper
       include Mixin
-
-      MAX_PIPELINE_SIZE = 40
-      SLICED_NUMBERS = (0...NUMBER_OF_KEYS).each_slice(MAX_PIPELINE_SIZE).freeze
 
       def do_test_after_scaled_out
         SLICED_NUMBERS.each do |numbers|
