@@ -108,7 +108,7 @@ module TestAgainstClusterScale
       (max + 1..max + 2).map { |port| "#{TEST_REDIS_SCHEME}://#{TEST_REDIS_HOST}:#{port}" }
     end
 
-    def retry_call(attempts:)
+    def retryable(attempts:)
       loop do
         raise MaxRetryExceeded if attempts <= 0
 
@@ -135,7 +135,7 @@ module TestAgainstClusterScale
 
       def do_test_after_scaled_in
         NUMBER_OF_KEYS.times do |i|
-          got = retry_call(attempts: MAX_ATTEMPTS) { @client.call('GET', "key#{i}") }
+          got = retryable(attempts: MAX_ATTEMPTS) { @client.call('GET', "key#{i}") }
           assert_equal(i.to_s, got, "Case: key#{i}")
         end
       end
@@ -158,8 +158,10 @@ module TestAgainstClusterScale
 
       def do_test_after_scaled_in
         SLICED_NUMBERS.each do |numbers|
-          got = @client.pipelined do |pi|
-            numbers.each { |i| pi.call('GET', "key#{i}") }
+          got = retryable(attempts: MAX_ATTEMPTS) do
+            @client.pipelined do |pi|
+              numbers.each { |i| pi.call('GET', "key#{i}") }
+            end
           end
 
           assert_equal(numbers.map(&:to_s), got, 'Case: GET')

@@ -175,7 +175,7 @@ class RedisClient
             required_redirections ||= {}
             required_redirections[node_key] = v
           when StandardError
-            stale_cluster_state = true if v.is_a?(::RedisClient::ConnectionError)
+            stale_cluster_state = true if v.is_a?(::RedisClient::ConnectionError) || v.message.start_with?('CLUSTERDOWN Hash slot not served')
             errors ||= {}
             errors[node_key] = v
           else
