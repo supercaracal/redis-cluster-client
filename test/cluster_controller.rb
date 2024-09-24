@@ -6,11 +6,14 @@ class ClusterController
   SLOT_SIZE = 16_384
   DEFAULT_SHARD_SIZE = 3
   DEFAULT_REPLICA_SIZE = 1
-  DEFAULT_MAX_ATTEMPTS = 600
+  DEFAULT_MAX_ATTEMPTS = 60
   DEFAULT_TIMEOUT_SEC = 5.0
+  SLEEP_SEC = 1.0
 
   private_constant :SLOT_SIZE, :DEFAULT_SHARD_SIZE, :DEFAULT_REPLICA_SIZE,
                    :DEFAULT_MAX_ATTEMPTS, :DEFAULT_TIMEOUT_SEC
+
+  MaxRetryExceeded = Class.new(StandardError)
 
   RedisNodeInfo = Struct.new(
     'RedisClusterNodeInfo',
@@ -149,7 +152,7 @@ class ClusterController
     ([dest, src] + rest).each do |cli|
       cli.call('CLUSTER', 'SETSLOT', slot, 'NODE', id)
     rescue ::RedisClient::CommandError => e
-      raise unless e.message.start_with?('ERR Please use SETSLOT only with masters.', "ERR I don't know about node")
+      raise unless e.message.start_with?('ERR Please use SETSLOT only with masters.')
       # how weird, ignore
     end
 
@@ -340,7 +343,7 @@ class ClusterController
         rescue ::RedisClient::CommandError => e
           print_debug(e.message)
           # ERR Unknown node [node-id]
-          sleep 1.0
+          sleep SLEEP_SEC
           primary_id = primaries[i].call('CLUSTER', 'MYID')
           next
         end
@@ -426,12 +429,12 @@ class ClusterController
     attempt_count = 1
     clients.each do |client|
       attempt_count.step(max_attempts) do |i|
-        break if i >= max_attempts
+        raise MaxRetryExceeded if i >= max_attempts
 
         attempt_count += 1
         break if yield(client)
 
-        sleep 0.1
+        sleep SLEEP_SEC
       end
     end
   end
