@@ -40,12 +40,11 @@ module TestAgainstClusterScale
     end
 
     def test_01_scale_out
-      @controller = build_cluster_controller(TEST_NODE_URIS, shard_size: 3)
-
       @client.pipelined { |pi| NUMBER_OF_KEYS.times { |i| pi.call('SET', "key#{i}", i) } }
       wait_for_replication
 
       primary_url, replica_url = build_additional_node_urls
+      @controller = build_cluster_controller(TEST_NODE_URIS, shard_size: 3)
       @controller.scale_out(primary_url: primary_url, replica_url: replica_url)
 
       do_test_after_scaled_out
