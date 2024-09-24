@@ -79,7 +79,7 @@ class RedisClient
         @node.reload! if e.errors.values.any? do |err|
           next false if ::RedisClient::Cluster::ErrorIdentification.identifiable?(err) && @node.none? { |c| ::RedisClient::Cluster::ErrorIdentification.client_owns_error?(err, c) }
 
-          err.message.start_with?('CLUSTERDOWN Hash slot not served')
+          err.message.start_with?('CLUSTERDOWN Hash slot not served') || err.is_a?(::RedisClient::ConnectionError)
         end
 
         raise
