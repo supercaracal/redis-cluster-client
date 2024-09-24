@@ -30,10 +30,9 @@ class RedisClient
       attr_reader :errors
 
       def initialize(errors)
-        p errors.inspect
         @errors = {}
         if !errors.is_a?(Hash) || errors.empty?
-          super('')
+          super(errors.to_s)
           return
         end
 

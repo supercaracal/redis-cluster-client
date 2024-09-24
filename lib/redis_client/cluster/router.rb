@@ -67,6 +67,9 @@ class RedisClient
         end
       rescue ::RedisClient::CircuitBreaker::OpenCircuitError
         raise
+      rescue ::RedisClient::ConnectionError
+        @node.reload!
+        raise
       rescue ::RedisClient::Cluster::Node::ReloadNeeded
         @node.reload!
         raise ::RedisClient::Cluster::NodeMightBeDown
@@ -154,6 +157,9 @@ class RedisClient
         client_index += 1 if result_cursor == 0
 
         [((result_cursor << 8) + client_index).to_s, result_keys]
+      rescue ::RedisClient::ConnectionError
+        @node.reload!
+        raise
       end
 
       def assign_node(command)
