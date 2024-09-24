@@ -149,8 +149,7 @@ class ClusterController
     ([dest, src] + rest).each do |cli|
       cli.call('CLUSTER', 'SETSLOT', slot, 'NODE', id)
     rescue ::RedisClient::CommandError => e
-      raise unless e.message.start_with?('ERR Please use SETSLOT only with masters.')
-      raise unless e.message.start_with?('ERR Unknown node')
+      raise unless e.message.start_with?('ERR Please use SETSLOT only with masters.', 'ERR Unknown node')
       # how weird, ignore
     end
 

@@ -185,6 +185,7 @@ class RedisClient
         end
 
         work_group.close
+        @router.renew_cluster_state if stale_cluster_state
         raise ::RedisClient::Cluster::ErrorCollection, errors unless errors.nil?
 
         required_redirections&.each do |node_key, v|
@@ -193,8 +194,6 @@ class RedisClient
           v.indices.each { |i| v.replies[i] = handle_redirection(v.replies[i], pipeline, i) }
           pipeline.outer_indices.each_with_index { |outer, inner| all_replies[outer] = v.replies[inner] }
         end
-
-        @router.renew_cluster_state if stale_cluster_state
 
         all_replies
       end
