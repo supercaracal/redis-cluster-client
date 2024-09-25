@@ -68,7 +68,6 @@ module TestAgainstClusterScale
     end
 
     def test_02_scale_in
-      ENV['DEBUG'] = '1' # TODO: remove
       @controller = build_cluster_controller(TEST_NODE_URIS + build_additional_node_urls, shard_size: 4)
       @controller.scale_in
 

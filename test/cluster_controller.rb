@@ -154,7 +154,7 @@ class ClusterController
       cli.call('CLUSTER', 'SETSLOT', slot, 'NODE', id)
       print_debug("#{cli.config.host}:#{cli.config.port} ... CLUSTER SETSLOT #{slot} NODE #{id}")
     rescue ::RedisClient::CommandError => e
-      raise unless e.message.start_with?('ERR Please use SETSLOT only with masters.', 'ERR Unknown node')
+      raise unless e.message.start_with?('ERR Please use SETSLOT only with masters.')
       # how weird, ignore
     end
 
@@ -194,7 +194,19 @@ class ClusterController
   end
 
   def scale_in # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    # TODO: remove
+    8.times do |i|
+      name = "node#{i + 1}"
+      print "\n[#{name}]\n"
+      print "\n#{`docker compose -f compose.scale.yaml exec #{name} redis-cli cluster nodes`}\n"
+    end
+
     rows = associate_with_clients_and_nodes(@clients)
+
+    # TODO: remove
+    rows.each do |row|
+      print "\n#{row}\n"
+    end
 
     primary_info = rows.reject(&:empty_slots?).min_by(&:slot_size)
     replica_info = rows.find { |r| r.primary_id == primary_info.id }
