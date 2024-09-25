@@ -31,6 +31,7 @@ module TestAgainstClusterScale
       @captured_commands.clear
       @redirect_count.clear
       @cluster_down_error_count = 0
+      ENV['DEBUG'] = '1' # TODO: remove
     end
 
     def teardown
@@ -49,8 +50,6 @@ module TestAgainstClusterScale
       end
 
       wait_for_replication
-
-      ENV['DEBUG'] = '1' # TODO: remove
 
       primary_url, replica_url = build_additional_node_urls
       @controller = build_cluster_controller(TEST_NODE_URIS, shard_size: 3)
