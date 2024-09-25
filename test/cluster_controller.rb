@@ -65,7 +65,14 @@ class ClusterController
     wait_cluster_building(@clients, max_attempts: @max_attempts)
     print_debug('wait for the replication to be established...')
     wait_replication(@clients, number_of_replicas: @number_of_replicas, max_attempts: @max_attempts)
-    print "\n#{`docker compose -f compose.scale.yaml exec node1 redis-cli cluster nodes`}" # TODO: remove
+
+    # TODO: remove
+    8.times do |i|
+      name = "node#{i + 1}"
+      print "\n[#{name}]\n"
+      print "\n#{`docker compose -f compose.scale.yaml exec #{name} redis-cli cluster nodes`}\n"
+    end
+
     print_debug('wait for commands to be accepted...')
     wait_cluster_recovering(@clients, max_attempts: @max_attempts)
   end
