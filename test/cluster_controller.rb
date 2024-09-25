@@ -133,6 +133,7 @@ class ClusterController
 
     number_of_keys = src_client.call('CLUSTER', 'COUNTKEYSINSLOT', slot)
     keys = src_client.call('CLUSTER', 'GETKEYSINSLOT', slot, number_of_keys)
+    print_debug("#{src_client.config.host}:#{src_client.config.port} => #{dest_client.config.host}:#{dest_client.config.port} ... #{keys}")
     return if keys.empty?
 
     begin
@@ -159,6 +160,7 @@ class ClusterController
 
     ([dest, src] + rest).each do |cli|
       cli.call('CLUSTER', 'SETSLOT', slot, 'NODE', id)
+      print_debug("#{cli.config.host}:#{cli.config.port} ... CLUSTER SETSLOT #{slot} NODE #{id}")
     rescue ::RedisClient::CommandError => e
       raise unless e.message.start_with?('ERR Please use SETSLOT only with masters.')
       # how weird, ignore
