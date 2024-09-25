@@ -203,6 +203,7 @@ class ClusterController
     primary_info.slots.each do |slot|
       src = primary_info.node_key
       dest = rest_primary_node_keys.sample
+      print_debug("Resharding slot #{slot}: #{src} => #{dest}")
       start_resharding(slot: slot, src_node_key: src, dest_node_key: dest)
       finish_resharding(slot: slot, src_node_key: src, dest_node_key: dest)
     end
