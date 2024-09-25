@@ -50,6 +50,7 @@ module TestAgainstClusterScale
 
       wait_for_replication
 
+      # TODO: remove
       print "\n#{`docker compose -f compose.scale.yaml exec node1 redis-cli cluster nodes`}"
       ENV['DEBUG'] = '1'
 
