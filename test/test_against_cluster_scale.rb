@@ -65,6 +65,7 @@ module TestAgainstClusterScale
       assert_equal(want, got, 'Case: number of nodes')
 
       refute(@captured_commands.count('cluster', 'nodes').zero?, @captured_commands.to_a.map(&:command))
+      system('docker compose -f compose.scale.yaml exec node1 redis-cli cluster nodes')
     end
 
     def test_02_scale_in
