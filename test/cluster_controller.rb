@@ -58,23 +58,15 @@ class ClusterController
     @debug = ENV.fetch('DEBUG', '0')
   end
 
-  def wait_for_cluster_to_be_ready
+  def wait_for_cluster_to_be_ready(skip_clients: [])
     print_debug('wait for nodes to be recognized...')
     wait_meeting(@clients, max_attempts: @max_attempts)
     print_debug('wait for the cluster state to be ok...')
     wait_cluster_building(@clients, max_attempts: @max_attempts)
     print_debug('wait for the replication to be established...')
     wait_replication(@clients, number_of_replicas: @number_of_replicas, max_attempts: @max_attempts)
-
-    # TODO: remove
-    8.times do |i|
-      name = "node#{i + 1}"
-      print "\n[#{name}]\n"
-      print "\n#{`docker compose -f compose.scale.yaml exec #{name} redis-cli cluster nodes`}\n"
-    end
-
     print_debug('wait for commands to be accepted...')
-    wait_cluster_recovering(@clients, max_attempts: @max_attempts)
+    wait_cluster_recovering(@clients, max_attempts: @max_attempts, skip_clients: skip_clients)
   end
 
   def rebuild
@@ -189,7 +181,7 @@ class ClusterController
     primary_id = primary.call('CLUSTER', 'MYID')
     replica.call('CLUSTER', 'REPLICATE', primary_id)
     save_config(@clients)
-    wait_for_cluster_to_be_ready
+    wait_for_cluster_to_be_ready(skip_clients: [primary, replica])
 
     rows = associate_with_clients_and_nodes(@clients)
 
@@ -415,11 +407,11 @@ class ClusterController
     end
   end
 
-  def wait_cluster_recovering(clients, max_attempts:)
+  def wait_cluster_recovering(clients, max_attempts:, skip_clients: [])
     key = 0
     wait_for_state(clients, max_attempts: max_attempts) do |client|
       print_debug("#{client.config.host}:#{client.config.port} ... GET #{key}")
-      client.call('GET', key) if primary_client?(client)
+      client.call('GET', key) if primary_client?(client) && !skip_clients.include?(client)
       true
     rescue ::RedisClient::CommandError => e
       if e.message.start_with?('CLUSTERDOWN')

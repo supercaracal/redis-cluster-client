@@ -50,9 +50,7 @@ module TestAgainstClusterScale
 
       wait_for_replication
 
-      # TODO: remove
-      print "\n#{`docker compose -f compose.scale.yaml exec node1 redis-cli cluster nodes`}"
-      ENV['DEBUG'] = '1'
+      ENV['DEBUG'] = '1' # TODO: remove
 
       primary_url, replica_url = build_additional_node_urls
       @controller = build_cluster_controller(TEST_NODE_URIS, shard_size: 3)
