@@ -12,10 +12,6 @@ module TestAgainstClusterScale
     MAX_PIPELINE_SIZE = 40
     SLICED_NUMBERS = (0...NUMBER_OF_KEYS).each_slice(MAX_PIPELINE_SIZE).freeze
 
-    def self.test_order
-      :alpha
-    end
-
     def setup
       @captured_commands = ::Middlewares::CommandCapture::CommandBuffer.new
       @redirect_count = ::Middlewares::RedirectCount::Counter.new
@@ -127,6 +123,10 @@ module TestAgainstClusterScale
     class Single < TestingWrapper
       include Mixin
 
+      def self.test_order
+        :alpha
+      end
+
       def do_test_after_scaled_out
         NUMBER_OF_KEYS.times do |i|
           assert_equal(i.to_s, @client.call('GET', "key#{i}"), "Case: key#{i}")
@@ -145,6 +145,10 @@ module TestAgainstClusterScale
   if PATTERN == 'Pipeline' || PATTERN.empty?
     class Pipeline < TestingWrapper
       include Mixin
+
+      def self.test_order
+        :alpha
+      end
 
       def do_test_after_scaled_out
         SLICED_NUMBERS.each do |numbers|
@@ -174,6 +178,10 @@ module TestAgainstClusterScale
     class Transaction < TestingWrapper
       include Mixin
 
+      def self.test_order
+        :alpha
+      end
+
       def do_test_after_scaled_out
         # TODO: impl
       end
@@ -187,6 +195,10 @@ module TestAgainstClusterScale
   if PATTERN == 'PubSub' || PATTERN.empty?
     class PubSub < TestingWrapper
       include Mixin
+
+      def self.test_order
+        :alpha
+      end
 
       def do_test_after_scaled_out
         # TODO: impl
