@@ -50,7 +50,7 @@ module TestAgainstClusterScale
 
       wait_for_replication
 
-      p `docker compose -f compose.scale.yaml exec node1 redis-cli cluster nodes`
+      print `docker compose -f compose.scale.yaml exec node1 redis-cli cluster nodes`
       ENV['DEBUG'] = '1'
 
       primary_url, replica_url = build_additional_node_urls
