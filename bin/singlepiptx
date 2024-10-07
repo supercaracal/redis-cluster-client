@@ -5,19 +5,24 @@ require 'bundler/setup'
 require 'redis_cluster_client'
 
 module SinglePipTxDebug
+  WAIT_SEC = 2.0
+
   module_function
 
   def spawn_single(cli)
     Thread.new(cli) do |r|
       role = '     Single'
+      keys = %w[single1 single3 single4].freeze
 
       loop do
-        handle_errors(role) do
-          reply = r.call('incr', 'single')
-          log "#{role}: #{reply}"
+        keys.each do |key|
+          handle_errors(role) do
+            reply = r.call('incr', key)
+            log "#{role}: #{key}=#{reply}"
+          end
         end
       ensure
-        sleep 1.0
+        sleep WAIT_SEC
       end
     rescue StandardError => e
       log "#{role}: dead: #{e.class}: #{e.message}"
@@ -25,21 +30,25 @@ module SinglePipTxDebug
     end
   end
 
-  def spawn_pipeline(cli)
+  def spawn_pipeline(cli) # rubocop:disable Metrics/AbcSize
     Thread.new(cli) do |r|
       role = '   Pipeline'
+      keys = %w[pipeline1 pipeline2 pipeline4].freeze
 
       loop do
         handle_errors(role) do
           reply = r.pipelined do |pi|
-            pi.call('incr', 'pipeline')
-            pi.call('incr', 'pipeline')
+            keys.each do |key|
+              pi.call('incr', key)
+            end
           end
 
-          log "#{role}: #{reply}"
+          keys.each_with_index do |key, i|
+            log "#{role}: #{key}=#{reply[i]}"
+          end
         end
       ensure
-        sleep 1.0
+        sleep WAIT_SEC
       end
     rescue StandardError => e
       log "#{role}: dead: #{e.class}: #{e.message}"
@@ -47,24 +56,26 @@ module SinglePipTxDebug
     end
   end
 
-  def spawn_transaction(cli)
+  def spawn_transaction(cli) # rubocop:disable Metrics/AbcSize
     Thread.new(cli) do |r|
       role = 'Transaction'
+      keys = %w[transaction1 transaction3 transaction4].freeze
       i = 0
 
       loop do
-        handle_errors(role) do
-          reply = r.multi(watch: i.odd? ? %w[transaction] : nil) do |tx|
-            i += 1
-            tx.call('incr', 'transaction')
-            tx.call('incr', 'transaction')
-            tx.call('incr', 'transaction')
-          end
+        keys.each do |key|
+          handle_errors(role) do
+            reply = r.multi(watch: i.odd? ? [key] : nil) do |tx|
+              i += 1
+              tx.call('incr', key)
+              tx.call('incr', key)
+            end
 
-          log "#{role}: #{reply}"
+            log "#{role}: #{key}=#{reply[1]}"
+          end
         end
       ensure
-        sleep 1.0
+        sleep WAIT_SEC
       end
     rescue StandardError => e
       log "#{role}: dead: #{e.class}: #{e.message}"

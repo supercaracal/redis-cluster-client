@@ -430,9 +430,11 @@ class RedisClient
             # Mitigate load of servers by naive logic. Don't sleep with exponential backoff.
             now = obtain_current_time
             elapsed = @last_reloaded_at + @random.rand(STATE_REFRESH_INTERVAL) * 1_000_000
+            print ".\n"
             return if now < elapsed
           end
 
+          print "!\n"
           r = yield
           @last_reloaded_at = obtain_current_time
           @reload_times += 1

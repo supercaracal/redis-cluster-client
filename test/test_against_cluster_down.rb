@@ -82,12 +82,17 @@ class TestAgainstClusterDown < TestingWrapper
 
   def spawn_single(cli, rec)
     Thread.new(cli, rec) do |c, r|
+      keys = %w[single1 single3 single4].freeze
+      replies = []
       loop do
-        handle_errors do
-          c.call('incr', 'single')
-          reply = c.call('incr', 'single')
-          r.set(reply)
+        keys.each do |key|
+          handle_errors do
+            replies << c.call('incr', key)
+          end
         end
+
+        r.set(replies.min)
+        replies.clear
       ensure
         sleep WAIT_SEC
       end
@@ -96,14 +101,14 @@ class TestAgainstClusterDown < TestingWrapper
 
   def spawn_pipeline(cli, rec)
     Thread.new(cli, rec) do |c, r|
+      keys = %w[pipeline1 pipeline2 pipeline4].freeze
       loop do
         handle_errors do
           reply = c.pipelined do |pi|
-            pi.call('incr', 'pipeline')
-            pi.call('incr', 'pipeline')
+            keys.each { |key| pi.call('incr', key) }
           end
 
-          r.set(reply[1])
+          r.set(reply.min)
         end
       ensure
         sleep WAIT_SEC
@@ -113,17 +118,22 @@ class TestAgainstClusterDown < TestingWrapper
 
   def spawn_transaction(cli, rec)
     Thread.new(cli, rec) do |c, r|
+      keys = %w[transaction1 transaction3 transaction4].freeze
+      replies = []
       i = 0
       loop do
-        handle_errors do
-          reply = c.multi(watch: i.odd? ? %w[transaction] : nil) do |tx|
-            i += 1
-            tx.call('incr', 'transaction')
-            tx.call('incr', 'transaction')
+        keys.each do |key|
+          handle_errors do
+            replies << c.multi(watch: i.odd? ? [key] : nil) do |tx|
+              i += 1
+              tx.call('incr', key)
+              tx.call('incr', key)
+            end
           end
-
-          r.set(reply[1])
         end
+
+        r.set(replies.min)
+        replies.clear
       ensure
         sleep WAIT_SEC
       end
@@ -132,26 +142,31 @@ class TestAgainstClusterDown < TestingWrapper
 
   def spawn_publisher(cli, rec)
     Thread.new(cli, rec) do |c, r|
+      channels = %w[chan1 chan2 chan3].freeze
       i = 0
       loop do
-        handle_errors do
-          c.call('spublish', 'chan', i)
-          r.set(i)
-          i += 1
+        channels.each do |channel|
+          handle_errors do
+            c.call('spublish', channel, i)
+          end
         end
+
+        r.set(i)
+        i += 1
       ensure
-        sleep WAIT_SEC
+        sleep WAIT_SEC * 3
       end
     end
   end
 
   def spawn_subscriber(cli, rec)
     Thread.new(cli, rec) do |c, r|
+      channels = %w[chan1 chan2 chan3].freeze
       ps = nil
 
       loop do
         ps = c.pubsub
-        ps.call('ssubscribe', 'chan')
+        channels.each { |chan| ps.call('ssubscribe', chan) }
         break
       rescue StandardError
         ps&.close
