@@ -132,7 +132,9 @@ class RedisClient
       rescue ::RedisClient::ConnectionError => e
         raise unless ::RedisClient::Cluster::ErrorIdentification.client_owns_error?(e, node)
 
+        retry_count -= 1
         renew_cluster_state
+        retry if retry_count >= 0
         raise
       end
 
