@@ -98,7 +98,8 @@ module SinglePipTxDebug
   end
 end
 
-clients = Array.new(9) { RedisClient.cluster(connect_with_original_config: true).new_client }
+nodes = (6379..6384).map { |port| "redis://127.0.0.1:#{port}" }.freeze
+clients = Array.new(9) { RedisClient.cluster(nodes: nodes, connect_with_original_config: true).new_client }.freeze
 threads = []
 
 Signal.trap(:INT) do
