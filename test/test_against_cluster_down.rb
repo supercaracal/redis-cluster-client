@@ -146,7 +146,7 @@ class TestAgainstClusterDown < TestingWrapper
         rec.set(i)
         i += 1
       ensure
-        sleep WAIT_SEC * 3
+        sleep WAIT_SEC
       end
     end
   end
