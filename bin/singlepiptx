@@ -9,76 +9,66 @@ module SinglePipTxDebug
 
   module_function
 
-  def spawn_single(cli)
-    Thread.new(cli) do |r|
-      role = '     Single'
-      keys = %w[single1 single3 single4].freeze
-
-      loop do
-        keys.each do |key|
-          handle_errors(role) do
-            reply = r.call('incr', key)
-            log "#{role}: #{key}=#{reply}"
-          end
-        end
-      ensure
-        sleep WAIT_SEC
-      end
-    rescue StandardError => e
-      log "#{role}: dead: #{e.class}: #{e.message}"
-      raise
-    end
-  end
-
-  def spawn_pipeline(cli) # rubocop:disable Metrics/AbcSize
-    Thread.new(cli) do |r|
-      role = '   Pipeline'
-      keys = %w[pipeline1 pipeline2 pipeline4].freeze
+  def spawn_single(client, key)
+    Thread.new(client) do |cli|
+      role = 'Single'
 
       loop do
         handle_errors(role) do
-          reply = r.pipelined do |pi|
-            keys.each do |key|
-              pi.call('incr', key)
-            end
-          end
-
-          keys.each_with_index do |key, i|
-            log "#{role}: #{key}=#{reply[i]}"
-          end
+          reply = cli.call('incr', key)
+          log(role, key, reply)
         end
       ensure
         sleep WAIT_SEC
       end
     rescue StandardError => e
-      log "#{role}: dead: #{e.class}: #{e.message}"
+      log(role, :dead, e.class, e.message)
       raise
     end
   end
 
-  def spawn_transaction(cli) # rubocop:disable Metrics/AbcSize
-    Thread.new(cli) do |r|
-      role = 'Transaction'
-      keys = %w[transaction1 transaction3 transaction4].freeze
-      i = 0
+  def spawn_pipeline(client, key)
+    Thread.new(client) do |cli|
+      role = 'Pipeline'
 
       loop do
-        keys.each do |key|
-          handle_errors(role) do
-            reply = r.multi(watch: i.odd? ? [key] : nil) do |tx|
-              i += 1
-              tx.call('incr', key)
-              tx.call('incr', key)
-            end
-
-            log "#{role}: #{key}=#{reply[1]}"
+        handle_errors(role) do
+          reply = cli.pipelined do |pi|
+            pi.call('incr', key)
+            pi.call('incr', key)
           end
+
+          log(role, key, reply.last)
         end
       ensure
         sleep WAIT_SEC
       end
     rescue StandardError => e
-      log "#{role}: dead: #{e.class}: #{e.message}"
+      log(role, :dead, e.class, e.message)
+      raise
+    end
+  end
+
+  def spawn_transaction(client, key)
+    Thread.new(client) do |cli|
+      role = 'Transaction'
+      i = 0
+
+      loop do
+        handle_errors(role) do
+          reply = cli.multi(watch: i.odd? ? [key] : nil) do |tx|
+            tx.call('incr', key)
+            tx.call('incr', key)
+          end
+
+          log(role, key, reply.last)
+          i += 1
+        end
+      ensure
+        sleep WAIT_SEC
+      end
+    rescue StandardError => e
+      log(role, :dead, e.class, e.message)
       raise
     end
   end
@@ -86,26 +76,29 @@ module SinglePipTxDebug
   def handle_errors(role) # rubocop:disable Metrics/AbcSize
     yield
   rescue RedisClient::ConnectionError, RedisClient::Cluster::InitialSetupError, RedisClient::Cluster::NodeMightBeDown => e
-    log "#{role}: #{e.class}"
+    log(role, e.class)
   rescue RedisClient::CommandError => e
-    log "#{role}: #{e.class}: #{e.message}"
+    log(role, e.class, e.message)
     raise unless e.message.start_with?('CLUSTERDOWN')
   rescue RedisClient::Cluster::ErrorCollection => e
-    log "#{role}: #{e.class}: #{e.message}"
+    log(role, e.class, e.message)
     raise unless e.errors.values.all? do |err|
       err.message.start_with?('CLUSTERDOWN') || err.is_a?(::RedisClient::ConnectionError)
     end
   rescue StandardError => e
-    log "#{role}: #{e.class}: #{e.message}"
+    log(role, e.class, e.message)
     raise
   end
 
-  def log(msg)
-    print "#{msg}\n"
+  def log(*texts)
+    return if texts.nil? || texts.empty?
+
+    message = texts.map { |text| "#{' ' * [15 - text.to_s.size, 0].max}#{text}" }.join(': ')
+    print "#{message}\n"
   end
 end
 
-clients = Array.new(3) { RedisClient.cluster(connect_with_original_config: true).new_client }
+clients = Array.new(9) { RedisClient.cluster(connect_with_original_config: true).new_client }
 threads = []
 
 Signal.trap(:INT) do
@@ -115,7 +108,16 @@ Signal.trap(:INT) do
   exit 0
 end
 
-threads << SinglePipTxDebug.spawn_single(clients[0])
-threads << SinglePipTxDebug.spawn_pipeline(clients[1])
-threads << SinglePipTxDebug.spawn_transaction(clients[2])
+%w[single1 single3 single4].each_with_index do |key, i|
+  threads << SinglePipTxDebug.spawn_single(clients[i], key)
+end
+
+%w[pipeline1 pipeline2 pipeline4].each_with_index do |key, i|
+  threads << SinglePipTxDebug.spawn_pipeline(clients[i + 3], key)
+end
+
+%w[transaction1 transaction3 transaction4].each_with_index do |key, i|
+  threads << SinglePipTxDebug.spawn_transaction(clients[i + 6], key)
+end
+
 threads.each(&:join)
