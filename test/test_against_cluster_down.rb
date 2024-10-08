@@ -167,14 +167,12 @@ class TestAgainstClusterDown < TestingWrapper
 
       loop do
         handle_errors do
-          event = ps.next_event(0.01)
+          event = ps.next_event(WAIT_SEC)
           case event&.first
           when 'smessage' then rec.set(event[2])
           when 'sunsubscribe' then ps.call('ssubscribe', chan)
           end
         end
-      ensure
-        sleep WAIT_SEC
       end
     rescue StandardError, SignalException
       ps&.close

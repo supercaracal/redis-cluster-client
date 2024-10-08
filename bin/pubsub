@@ -47,17 +47,12 @@ module PubSubDebug
 
       loop do
         handle_errors('Subscriber') do
-          case ev = ps.next_event(0.01)
-          when nil then log(role, :event, 'nil')
-          when Array
-            log(role, *ev)
-            case ev.first
-            when 'sunsubscribe' then ps.call('ssubscribe', chan)
-            end
+          event = ps.next_event(WAIT_SEC)
+          log(role, *event) unless event.nil?
+          case event&.first
+          when 'sunsubscribe' then ps.call('ssubscribe', chan)
           end
         end
-      ensure
-        sleep WAIT_SEC
       end
     rescue StandardError, SignalException => e
       log(role, :dead, e.class, e.message)
