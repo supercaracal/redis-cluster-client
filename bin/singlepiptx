@@ -10,13 +10,13 @@ module SinglePipTxDebug
   module_function
 
   def spawn_single(client, key)
-    Thread.new(client) do |cli|
+    Thread.new(client, key) do |cli, k|
       role = 'Single'
 
       loop do
         handle_errors(role) do
-          reply = cli.call('incr', key)
-          log(role, key, reply)
+          reply = cli.call('incr', k)
+          log(role, k, reply)
         end
       ensure
         sleep WAIT_SEC
@@ -28,17 +28,17 @@ module SinglePipTxDebug
   end
 
   def spawn_pipeline(client, key)
-    Thread.new(client) do |cli|
+    Thread.new(client, key) do |cli, k|
       role = 'Pipeline'
 
       loop do
         handle_errors(role) do
           reply = cli.pipelined do |pi|
-            pi.call('incr', key)
-            pi.call('incr', key)
+            pi.call('incr', k)
+            pi.call('incr', k)
           end
 
-          log(role, key, reply.last)
+          log(role, k, reply.last)
         end
       ensure
         sleep WAIT_SEC
@@ -50,18 +50,18 @@ module SinglePipTxDebug
   end
 
   def spawn_transaction(client, key)
-    Thread.new(client) do |cli|
+    Thread.new(client, key) do |cli, k|
       role = 'Transaction'
       i = 0
 
       loop do
         handle_errors(role) do
-          reply = cli.multi(watch: i.odd? ? [key] : nil) do |tx|
-            tx.call('incr', key)
-            tx.call('incr', key)
+          reply = cli.multi(watch: i.odd? ? [k] : nil) do |tx|
+            tx.call('incr', k)
+            tx.call('incr', k)
           end
 
-          log(role, key, reply.last)
+          log(role, k, reply.last)
           i += 1
         end
       ensure
