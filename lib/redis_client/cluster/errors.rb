@@ -37,12 +37,17 @@ class RedisClient
       attr_reader :errors
 
       def self.with_errors(errors)
-        @errors = {}
-        return new(errors.to_s) if !errors.is_a?(Hash) || errors.empty?
+        if !errors.is_a?(Hash) || errors.empty?
+          new(errors.to_s).with_errors({})
+        else
+          messages = errors.map { |node_key, error| "#{node_key}: (#{error.class}) #{error.message}" }
+          new(messages.join(', ')).with_errors(errors)
+        end
+      end
 
-        @errors = errors
-        messages = @errors.map { |node_key, error| "#{node_key}: (#{error.class}) #{error.message}" }
-        new(messages.join(', '))
+      def with_errors(errors)
+        @errors = errors if @errors.nil?
+        self
       end
     end
 
