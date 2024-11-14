@@ -204,7 +204,7 @@ class RedisClient
 
         work_group.close
         @router.renew_cluster_state if cluster_state_errors
-        raise ::RedisClient::Cluster::ErrorCollection, errors unless errors.nil?
+        raise ::RedisClient::Cluster::ErrorCollection.with_errors(errors).with_config(@router.config) unless errors.nil?
 
         required_redirections&.each do |node_key, v|
           raise v.first_exception if v.first_exception

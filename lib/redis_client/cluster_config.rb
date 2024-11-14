@@ -92,6 +92,18 @@ class RedisClient
       augment_client_config(config)
     end
 
+    def resolved?
+      true
+    end
+
+    def sentinel?
+      false
+    end
+
+    def server_url
+      nil
+    end
+
     private
 
     def merge_concurrency_option(option)
