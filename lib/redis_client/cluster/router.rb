@@ -25,8 +25,6 @@ class RedisClient
 
       def initialize(config, concurrent_worker, pool: nil, **kwargs)
         @config = config
-        @original_config = config.dup if config.connect_with_original_config
-        @connect_with_original_config = config.connect_with_original_config
         @concurrent_worker = concurrent_worker
         @pool = pool
         @client_kwargs = kwargs
@@ -34,6 +32,9 @@ class RedisClient
         @node.reload!
         @command = ::RedisClient::Cluster::Command.load(@node.replica_clients.shuffle, slow_command_timeout: config.slow_command_timeout)
         @command_builder = @config.command_builder
+      rescue ::RedisClient::Cluster::InitialSetupError => e
+        e.with_config(config)
+        raise
       end
 
       def send_command(method, command, *args, &block) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
@@ -79,6 +80,7 @@ class RedisClient
         renew_cluster_state if e.message.start_with?('CLUSTERDOWN')
         raise
       rescue ::RedisClient::Cluster::ErrorCollection => e
+        e.with_config(@config)
         raise if e.errors.any?(::RedisClient::CircuitBreaker::OpenCircuitError)
 
         renew_cluster_state if e.errors.values.any? do |err|
@@ -405,7 +407,7 @@ class RedisClient
       def handle_node_reload_error(retry_count: 1)
         yield
       rescue ::RedisClient::Cluster::Node::ReloadNeeded
-        raise ::RedisClient::Cluster::NodeMightBeDown.with_config(@config) if retry_count <= 0
+        raise ::RedisClient::Cluster::NodeMightBeDown.new.with_config(@config) if retry_count <= 0
 
         retry_count -= 1
         renew_cluster_state

@@ -108,13 +108,13 @@ class RedisClient
         end
       end
 
-      ReplySizeError = Class.new(::RedisClient::Error)
+      ReplySizeError = Class.new(::RedisClient::Cluster::Error)
 
-      class StaleClusterState < ::RedisClient::Error
+      class StaleClusterState < ::RedisClient::Cluster::Error
         attr_accessor :replies, :first_exception
       end
 
-      class RedirectionNeeded < ::RedisClient::Error
+      class RedirectionNeeded < ::RedisClient::Cluster::Error
         attr_accessor :replies, :indices, :first_exception
       end
 

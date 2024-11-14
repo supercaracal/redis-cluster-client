@@ -7,6 +7,7 @@ class RedisClient
     class Error < ::RedisClient::Error
       def with_config(config)
         @config = config
+        self
       end
     end
 

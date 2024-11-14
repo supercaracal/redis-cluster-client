@@ -28,7 +28,7 @@ class RedisClient
       private_constant :USE_CHAR_ARRAY_SLOT, :SLOT_SIZE, :MIN_SLOT, :MAX_SLOT,
                        :DEAD_FLAGS, :ROLE_FLAGS, :EMPTY_ARRAY, :EMPTY_HASH
 
-      ReloadNeeded = Class.new(::RedisClient::Error)
+      ReloadNeeded = Class.new(::RedisClient::Cluster::Error)
 
       Info = Struct.new(
         'RedisClusterNode',
