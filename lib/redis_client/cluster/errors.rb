@@ -38,10 +38,7 @@ class RedisClient
 
       def self.with_errors(errors)
         @errors = {}
-        if !errors.is_a?(Hash) || errors.empty?
-          super(errors.to_s)
-          return
-        end
+        return new(errors.to_s) if !errors.is_a?(Hash) || errors.empty?
 
         @errors = errors
         messages = @errors.map { |node_key, error| "#{node_key}: (#{error.class}) #{error.message}" }
