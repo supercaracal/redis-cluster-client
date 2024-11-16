@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'strscan'
 require 'redis_client'
 require 'redis_client/circuit_breaker'
 require 'redis_client/cluster/command'
@@ -7,7 +8,6 @@ require 'redis_client/cluster/errors'
 require 'redis_client/cluster/key_slot_converter'
 require 'redis_client/cluster/node'
 require 'redis_client/cluster/node_key'
-require 'redis_client/cluster/normalized_cmd_name'
 require 'redis_client/cluster/transaction'
 require 'redis_client/cluster/optimistic_locking'
 require 'redis_client/cluster/pipeline'
@@ -37,33 +37,50 @@ class RedisClient
         raise
       end
 
-      def send_command(method, command, *args, &block) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-        cmd = ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_command(command)
-        case cmd
-        when 'ping'     then @node.send_ping(method, command, args).first.then(&TSF.call(block))
-        when 'wait'     then send_wait_command(method, command, args, &block)
-        when 'keys'     then @node.call_replicas(method, command, args).flatten.sort_by(&:to_s).then(&TSF.call(block))
-        when 'dbsize'   then @node.call_replicas(method, command, args).select { |e| e.is_a?(Integer) }.sum.then(&TSF.call(block))
-        when 'scan'     then scan(command, seed: 1)
-        when 'lastsave' then @node.call_all(method, command, args).sort_by(&:to_i).then(&TSF.call(block))
-        when 'role'     then @node.call_all(method, command, args, &block)
-        when 'config'   then send_config_command(method, command, args, &block)
-        when 'client'   then send_client_command(method, command, args, &block)
-        when 'cluster'  then send_cluster_command(method, command, args, &block)
-        when 'memory'   then send_memory_command(method, command, args, &block)
-        when 'script'   then send_script_command(method, command, args, &block)
-        when 'pubsub'   then send_pubsub_command(method, command, args, &block)
-        when 'watch'    then send_watch_command(command, &block)
-        when 'mset', 'mget', 'del'
-          send_multiple_keys_command(cmd, method, command, args, &block)
-        when 'acl', 'auth', 'bgrewriteaof', 'bgsave', 'quit', 'save'
+      def send_command(method, command, *args, &block) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity, Metrics/MethodLength
+        cmd = StringScanner.new(command.first)
+        if cmd.skip(/(get|set)/i)
+          # for an optimization
+          node = assign_node(command)
+          try_send(node, method, command, args, &block)
+        elsif cmd.skip(/(mset|mget|del)/i)
+          send_multiple_keys_command(command.first, method, command, args, &block)
+        elsif cmd.skip(/ping/i)
+          @node.send_ping(method, command, args).first.then(&TSF.call(block))
+        elsif cmd.skip(/wait/i)
+          send_wait_command(method, command, args, &block)
+        elsif cmd.skip(/keys/i)
+          @node.call_replicas(method, command, args).flatten.sort_by(&:to_s).then(&TSF.call(block))
+        elsif cmd.skip(/dbsize/i)
+          @node.call_replicas(method, command, args).select { |e| e.is_a?(Integer) }.sum.then(&TSF.call(block))
+        elsif cmd.skip(/scan/i)
+          scan(command, seed: 1)
+        elsif cmd.skip(/lastsave/i)
+          @node.call_all(method, command, args).sort_by(&:to_i).then(&TSF.call(block))
+        elsif cmd.skip(/role/i)
+          @node.call_all(method, command, args, &block)
+        elsif cmd.skip(/config/i)
+          send_config_command(method, command, args, &block)
+        elsif cmd.skip(/client/i)
+          send_client_command(method, command, args, &block)
+        elsif cmd.skip(/cluster/i)
+          send_cluster_command(method, command, args, &block)
+        elsif cmd.skip(/memory/i)
+          send_memory_command(method, command, args, &block)
+        elsif cmd.skip(/script/i)
+          send_script_command(method, command, args, &block)
+        elsif cmd.skip(/pubsub/i)
+          send_pubsub_command(method, command, args, &block)
+        elsif cmd.skip(/watch/i)
+          send_watch_command(command, &block)
+        elsif cmd.skip(/(acl|auth|bgrewriteaof|bgsave|quit|save)/i)
           @node.call_all(method, command, args).first.then(&TSF.call(block))
-        when 'flushall', 'flushdb'
+        elsif cmd.skip(/(flushall|flushdb)/i)
           @node.call_primaries(method, command, args).first.then(&TSF.call(block))
-        when 'readonly', 'readwrite', 'shutdown'
-          raise ::RedisClient::Cluster::OrchestrationCommandNotSupported.from_command(cmd).with_config(@config)
-        when 'discard', 'exec', 'multi', 'unwatch'
-          raise ::RedisClient::Cluster::AmbiguousNodeError.from_command(cmd).with_config(@config)
+        elsif cmd.skip(/(readonly|readwrite|shutdown)/i)
+          raise ::RedisClient::Cluster::OrchestrationCommandNotSupported.from_command(command.first).with_config(@config)
+        elsif cmd.skip(/(discard|exec|multi|unwatch)/i)
+          raise ::RedisClient::Cluster::AmbiguousNodeError.from_command(command.first).with_config(@config)
         else
           node = assign_node(command)
           try_send(node, method, command, args, &block)
@@ -279,74 +296,83 @@ class RedisClient
       end
 
       def send_config_command(method, command, args, &block)
-        case ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_subcommand(command)
-        when 'resetstat', 'rewrite', 'set'
+        subcmd = StringScanner.new(command[1])
+        if subcmd.skip(/(resetstat|rewrite|set)/i)
           @node.call_all(method, command, args).first.then(&TSF.call(block))
-        else assign_node(command).public_send(method, *args, command, &block)
+        else
+          assign_node(command).public_send(method, *args, command, &block)
         end
       end
 
       def send_memory_command(method, command, args, &block)
-        case ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_subcommand(command)
-        when 'stats' then @node.call_all(method, command, args, &block)
-        when 'purge' then @node.call_all(method, command, args).first.then(&TSF.call(block))
-        else assign_node(command).public_send(method, *args, command, &block)
+        subcmd = StringScanner.new(command[1])
+        if subcmd.skip(/stats/i)
+          @node.call_all(method, command, args, &block)
+        elsif subcmd.skip(/purge/i)
+          @node.call_all(method, command, args).first.then(&TSF.call(block))
+        else
+          assign_node(command).public_send(method, *args, command, &block)
         end
       end
 
       def send_client_command(method, command, args, &block)
-        case ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_subcommand(command)
-        when 'list' then @node.call_all(method, command, args, &block).flatten
-        when 'pause', 'reply', 'setname'
+        subcmd = StringScanner.new(command[1])
+        if subcmd.skip(/list/i)
+          @node.call_all(method, command, args, &block).flatten
+        elsif subcmd.skip(/(pause|reply|setname)/i)
           @node.call_all(method, command, args).first.then(&TSF.call(block))
-        else assign_node(command).public_send(method, *args, command, &block)
+        else
+          assign_node(command).public_send(method, *args, command, &block)
         end
       end
 
       def send_cluster_command(method, command, args, &block) # rubocop:disable Metrics/AbcSize
-        case subcommand = ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_subcommand(command)
-        when 'addslots', 'delslots', 'failover', 'forget', 'meet', 'replicate',
-             'reset', 'set-config-epoch', 'setslot'
-          raise ::RedisClient::Cluster::OrchestrationCommandNotSupported.from_command(['cluster', subcommand]).with_config(@config)
-        when 'saveconfig' then @node.call_all(method, command, args).first.then(&TSF.call(block))
-        when 'getkeysinslot'
+        subcmd = StringScanner.new(command[1])
+        if subcmd.skip(/(addslots|delslots|failover|forget|meet|replicate|reset|set-config-epoch|setslot)/i)
+          raise ::RedisClient::Cluster::OrchestrationCommandNotSupported.from_command(command[0, 2]).with_config(@config)
+        elsif subcmd.skip(/saveconfig/i)
+          @node.call_all(method, command, args).first.then(&TSF.call(block))
+        elsif subcmd.skip(/getkeysinslot/i)
           raise ArgumentError, command.join(' ') if command.size != 4
 
           handle_node_reload_error do
             node_key = @node.find_node_key_of_replica(command[2])
             @node.find_by(node_key).public_send(method, *args, command, &block)
           end
-        else assign_node(command).public_send(method, *args, command, &block)
+        else
+          assign_node(command).public_send(method, *args, command, &block)
         end
       end
 
       def send_script_command(method, command, args, &block) # rubocop:disable Metrics/AbcSize
-        case ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_subcommand(command)
-        when 'debug', 'kill'
+        subcmd = StringScanner.new(command[1])
+        if subcmd.skip(/(debug|kill)/i)
           @node.call_all(method, command, args).first.then(&TSF.call(block))
-        when 'flush', 'load'
+        elsif subcmd.skip(/(flush|load)/i)
           @node.call_primaries(method, command, args).first.then(&TSF.call(block))
-        when 'exists'
+        elsif subcmd.skip(/exists/i)
           @node.call_all(method, command, args).transpose.map { |arr| arr.any?(&:zero?) ? 0 : 1 }.then(&TSF.call(block))
-        else assign_node(command).public_send(method, *args, command, &block)
+        else
+          assign_node(command).public_send(method, *args, command, &block)
         end
       end
 
       def send_pubsub_command(method, command, args, &block) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-        case ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_subcommand(command)
-        when 'channels'
+        subcmd = StringScanner.new(command[1])
+        if subcmd.skip(/channels/i)
           @node.call_all(method, command, args).flatten.uniq.sort_by(&:to_s).then(&TSF.call(block))
-        when 'shardchannels'
+        elsif subcmd.skip(/shardchannels/i)
           @node.call_replicas(method, command, args).flatten.uniq.sort_by(&:to_s).then(&TSF.call(block))
-        when 'numpat'
+        elsif subcmd.skip(/numpat/i)
           @node.call_all(method, command, args).select { |e| e.is_a?(Integer) }.sum.then(&TSF.call(block))
-        when 'numsub'
+        elsif subcmd.skip(/numsub/i)
           @node.call_all(method, command, args).reject(&:empty?).map { |e| Hash[*e] }
                .reduce({}) { |a, e| a.merge(e) { |_, v1, v2| v1 + v2 } }.then(&TSF.call(block))
-        when 'shardnumsub'
+        elsif subcmd.skip(/shardnumsub/i)
           @node.call_replicas(method, command, args).reject(&:empty?).map { |e| Hash[*e] }
                .reduce({}) { |a, e| a.merge(e) { |_, v1, v2| v1 + v2 } }.then(&TSF.call(block))
-        else assign_node(command).public_send(method, *args, command, &block)
+        else
+          assign_node(command).public_send(method, *args, command, &block)
         end
       end
 
@@ -365,17 +391,21 @@ class RedisClient
         end
       end
 
-      MULTIPLE_KEYS_COMMAND_TO_SINGLE = {
-        'mget' => ['get', 1].freeze,
-        'mset' => ['set', 2].freeze,
-        'del' => ['del', 1].freeze
-      }.freeze
-
-      private_constant :MULTIPLE_KEYS_COMMAND_TO_SINGLE
-
       def send_multiple_keys_command(cmd, method, command, args, &block) # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
         # This implementation is prioritized performance rather than readability or so.
-        single_key_cmd, keys_step = MULTIPLE_KEYS_COMMAND_TO_SINGLE.fetch(cmd)
+        scanner = StringScanner.new(cmd)
+        if scanner.skip(/mget/i)
+          single_key_cmd = 'get'
+          keys_step = 1
+        elsif scanner.skip(/mset/i)
+          single_key_cmd = 'set'
+          keys_step = 2
+        elsif scanner.skip(/del/i)
+          single_key_cmd = 'del'
+          keys_step = 1
+        else
+          raise NotImplementedError, cmd
+        end
 
         return try_send(assign_node(command), method, command, args, &block) if command.size <= keys_step + 1 || ::RedisClient::Cluster::KeySlotConverter.hash_tag_included?(command[1])
 
@@ -397,10 +427,13 @@ class RedisClient
         end
 
         replies = pipeline.execute
-        result = case cmd
-                 when 'mset' then replies.first
-                 when 'del' then replies.sum
-                 else replies
+        scanner.reset
+        result = if scanner.skip(/mset/i)
+                   replies.first
+                 elsif scanner.skip(/del/i)
+                   replies.sum
+                 else
+                   replies
                  end
         block_given? ? yield(result) : result
       end

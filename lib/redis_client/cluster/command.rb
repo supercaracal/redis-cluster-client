@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
+require 'strscan'
 require 'redis_client'
 require 'redis_client/cluster/errors'
 require 'redis_client/cluster/key_slot_converter'
-require 'redis_client/cluster/normalized_cmd_name'
 
 class RedisClient
   class Cluster
@@ -71,89 +71,52 @@ class RedisClient
         i = determine_first_key_position(command)
         return EMPTY_STRING if i == 0
 
-        (command[i].is_a?(Array) ? command[i].flatten.first : command[i]).to_s
-      end
-
-      def extract_all_keys(command)
-        keys_start = determine_first_key_position(command)
-        keys_end = determine_last_key_position(command, keys_start)
-        keys_step = determine_key_step(command)
-        return EMPTY_ARRAY if [keys_start, keys_end, keys_step].any?(&:zero?)
-
-        keys_end = [keys_end, command.size - 1].min
-        # use .. inclusive range because keys_end is a valid index.
-        (keys_start..keys_end).step(keys_step).map { |i| command[i] }
+        command[i]
       end
 
       def should_send_to_primary?(command)
-        name = ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_command(command)
-        @commands[name]&.write?
+        extract_command_info(command&.first)&.write?
       end
 
       def should_send_to_replica?(command)
-        name = ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_command(command)
-        @commands[name]&.readonly?
+        extract_command_info(command&.first)&.readonly?
       end
 
       def exists?(name)
-        @commands.key?(::RedisClient::Cluster::NormalizedCmdName.instance.get_by_name(name))
+        name = name.to_s unless name.is_a?(String)
+        @commands.key?(name) || @commands.key?(name&.downcase)
       end
 
       private
 
-      def determine_first_key_position(command) # rubocop:disable Metrics/CyclomaticComplexity
-        case name = ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_command(command)
-        when 'eval', 'evalsha', 'zinterstore', 'zunionstore' then 3
-        when 'object' then 2
-        when 'memory'
+      def extract_command_info(name)
+        @commands[name] || @commands[name&.downcase]
+      end
+
+      def determine_first_key_position(command) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/AbcSize, Metrics/PerceivedComplexity
+        return 0 if !command.is_a?(Array) || command.empty?
+
+        name = StringScanner.new(command.first)
+        if name.skip(/(get|set|del|mget|mset)/i) # for an optimization
+          extract_command_info(command.first)&.first_key_position.to_i
+        elsif name.skip(/(eval|evalsha|zinterstore|zunionstore)/i)
+          3
+        elsif name.skip(/object/i)
+          2
+        elsif name.skip(/memory/i)
           command[1].to_s.casecmp('usage').zero? ? 2 : 0
-        when 'migrate'
+        elsif name.skip(/migrate/i)
           command[3].empty? ? determine_optional_key_position(command, 'keys') : 3
-        when 'xread', 'xreadgroup'
+        elsif name.skip(/(xread|xreadgroup)/i)
           determine_optional_key_position(command, 'streams')
         else
-          @commands[name]&.first_key_position.to_i
+          extract_command_info(command.first)&.first_key_position.to_i
         end
       end
 
-      # IMPORTANT: this determines the last key position INCLUSIVE of the last key -
-      # i.e. command[determine_last_key_position(command)] is a key.
-      # This is in line with what Redis returns from COMMANDS.
-      def determine_last_key_position(command, keys_start) # rubocop:disable Metrics/AbcSize
-        case name = ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_command(command)
-        when 'eval', 'evalsha', 'zinterstore', 'zunionstore'
-          # EVALSHA sha1 numkeys [key [key ...]] [arg [arg ...]]
-          # ZINTERSTORE destination numkeys key [key ...] [WEIGHTS weight [weight ...]] [AGGREGATE <SUM | MIN | MAX>]
-          command[2].to_i + 2
-        when 'object', 'memory'
-          # OBJECT [ENCODING | FREQ | IDLETIME | REFCOUNT] key
-          # MEMORY USAGE key [SAMPLES count]
-          keys_start
-        when 'migrate'
-          # MIGRATE host port <key | ""> destination-db timeout [COPY] [REPLACE] [AUTH password | AUTH2 username password] [KEYS key [key ...]]
-          command[3].empty? ? (command.length - 1) : 3
-        when 'xread', 'xreadgroup'
-          # XREAD [COUNT count] [BLOCK milliseconds] STREAMS key [key ...] id [id ...]
-          keys_start + ((command.length - keys_start) / 2) - 1
-        else
-          # If there is a fixed, non-variable number of keys, don't iterate past that.
-          if @commands[name].last_key_position >= 0
-            @commands[name].last_key_position
-          else
-            command.length + @commands[name].last_key_position
-          end
-        end
-      end
-
-      def determine_optional_key_position(command, option_name) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-        idx = command&.flatten&.map(&:to_s)&.map(&:downcase)&.index(option_name&.downcase)
+      def determine_optional_key_position(command, option_name)
+        idx = command.map { |e| e.to_s.downcase }.index(option_name&.downcase)
         idx.nil? ? 0 : idx + 1
-      end
-
-      def determine_key_step(command)
-        name = ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_command(command)
-        # Some commands like EVALSHA have zero as the step in COMMANDS somehow.
-        @commands[name].key_step == 0 ? 1 : @commands[name].key_step
       end
     end
   end
