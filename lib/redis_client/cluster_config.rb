@@ -3,7 +3,6 @@
 require 'uri'
 require 'redis_client'
 require 'redis_client/cluster'
-require 'redis_client/cluster/command_builder'
 require 'redis_client/cluster/errors'
 require 'redis_client/cluster/node_key'
 require 'redis_client/cluster/noop_command_builder'
@@ -44,7 +43,7 @@ class RedisClient
       connect_with_original_config: false,
       client_implementation: ::RedisClient::Cluster, # for redis gem
       slow_command_timeout: SLOW_COMMAND_TIMEOUT,
-      command_builder: ::RedisClient::Cluster::CommandBuilder,
+      command_builder: ::RedisClient::CommandBuilder,
       max_startup_sample: MAX_STARTUP_SAMPLE,
       **client_config
     )

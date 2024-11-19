@@ -50,7 +50,7 @@ class RedisClient
           rows&.each_with_object({}) do |row, acc|
             next if row[0].nil?
 
-            acc[row[0].downcase] = ::RedisClient::Cluster::Command::Detail.new(
+            acc[row.first] = ::RedisClient::Cluster::Command::Detail.new(
               first_key_position: row[3],
               key_step: row[5],
               write?: row[2].include?('write'),
@@ -72,36 +72,49 @@ class RedisClient
       end
 
       def should_send_to_primary?(command)
-        @commands[command.first]&.write?
+        find_command_info(command.first)&.write?
       end
 
       def should_send_to_replica?(command)
-        @commands[command.first]&.readonly?
+        find_command_info(command.first)&.readonly?
       end
 
       def exists?(name)
-        @commands.key?(name)
+        @commands.key?(name) || @commands.key?(name.to_s.downcase)
       end
 
       private
 
-      def determine_first_key_position(command) # rubocop:disable Metrics/CyclomaticComplexity
-        case command.first
-        when 'eval', 'evalsha', 'zinterstore', 'zunionstore' then 3
-        when 'object' then 2
-        when 'memory'
+      def find_command_info(name)
+        @commands[name] || @commands[name.to_s.downcase]
+      end
+
+      def determine_first_key_position(command) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/AbcSize, Metrics/PerceivedComplexity
+        if command.first.casecmp('eval').zero?
+          3
+        elsif command.first.casecmp('evalsha').zero?
+          3
+        elsif command.first.casecmp('zinterstore').zero?
+          3
+        elsif command.first.casecmp('zunionstore').zero?
+          3
+        elsif command.first.casecmp('object').zero?
+          2
+        elsif command.first.casecmp('memory').zero?
           command[1].to_s.casecmp('usage').zero? ? 2 : 0
-        when 'migrate'
+        elsif command.first.casecmp('migrate').zero?
           command[3].empty? ? determine_optional_key_position(command, 'keys') : 3
-        when 'xread', 'xreadgroup'
+        elsif command.first.casecmp('xread').zero?
+          determine_optional_key_position(command, 'streams')
+        elsif command.first.casecmp('xreadgroup').zero?
           determine_optional_key_position(command, 'streams')
         else
-          @commands[command.first]&.first_key_position.to_i
+          find_command_info(command.first)&.first_key_position.to_i
         end
       end
 
       def determine_optional_key_position(command, option_name)
-        idx = command.map { |e| e.to_s.downcase }.index(option_name&.downcase)
+        idx = command.map { |e| e.to_s.downcase(:ascii) }.index(option_name)
         idx.nil? ? 0 : idx + 1
       end
     end

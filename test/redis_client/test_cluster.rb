@@ -381,7 +381,7 @@ class RedisClient
           tx.call('SET', '{key}2', '2')
         end
 
-        assert_equal(%w[watch multi set set exec], @captured_commands.to_a.map(&:command).map(&:first))
+        assert_equal(%w[watch multi SET SET exec], @captured_commands.to_a.map(&:command).map(&:first))
 
         wait_for_replication
         assert_equal(%w[1 2], @client.call('MGET', '{key}1', '{key}2'))
@@ -859,9 +859,9 @@ class RedisClient
         )
 
         assert_raises(RedisClient::CommandError) do
-          client1.call('SET', 'testkey', 'client1') do |got|
+          client1.call('set', 'testkey', 'client1') do |got|
             assert_equal('OK', got)
-            client2.call('SET', 'testkey', 'client2')
+            client2.call('set', 'testkey', 'client2')
           end
         end
 

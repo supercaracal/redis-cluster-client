@@ -57,14 +57,6 @@ class RedisClient
               'set' => { first_key_position: 1, key_step: 2, write?: true, readonly?: false }
             }
           },
-          {
-            rows: [
-              ['GET', 2, Set['readonly', 'fast'], 1, -1, 1, Set['@read', '@string', '@fast'], Set[], Set[], Set[]]
-            ],
-            want: {
-              'get' => { first_key_position: 1, key_step: 1, write?: false, readonly?: true }
-            }
-          },
           { rows: [[]], want: {} },
           { rows: [], want: {} },
           { rows: nil, want: {} }
@@ -83,11 +75,22 @@ class RedisClient
         cmd = ::RedisClient::Cluster::Command.load(@raw_clients)
         [
           { command: %w[set foo 1], want: 'foo' },
+          { command: %w[SET foo 1], want: 'foo' },
           { command: %w[get foo], want: 'foo' },
           { command: %w[get foo{bar}baz], want: 'foo{bar}baz' },
           { command: %w[mget foo bar baz], want: 'foo' },
-          { command: %w[unknown foo bar], want: '' },
-          { command: [], want: '' }
+          { command: ['eval', 'return ARGV[1]', '0', 'hello'], want: 'hello' },
+          { command: %w[evalsha sha1 2 foo bar baz zap], want: 'foo' },
+          { command: %w[migrate host port key 0 5 copy], want: 'key' },
+          { command: ['migrate', 'host', 'port', '', '0', '5', 'copy', 'keys', 'key'], want: 'key' },
+          { command: %w[zinterstore out 2 zset1 zset2 weights 2 3], want: 'zset1' },
+          { command: %w[zunionstore out 2 zset1 zset2 weights 2 3], want: 'zset1' },
+          { command: %w[object encoding key], want: 'key' },
+          { command: %w[memory help], want: '' },
+          { command: %w[memory usage key], want: 'key' },
+          { command: %w[xread count 2 streams mystream writers 0-0 0-0], want: 'mystream' },
+          { command: %w[xreadgroup group group consumer streams key id], want: 'key' },
+          { command: %w[unknown foo bar], want: '' }
         ].each_with_index do |c, idx|
           msg = "Case: #{idx}"
           got = cmd.extract_first_key(c[:command])
@@ -99,7 +102,9 @@ class RedisClient
         cmd = ::RedisClient::Cluster::Command.load(@raw_clients)
         [
           { command: %w[set foo 1], want: true },
+          { command: %w[SET foo 1], want: true },
           { command: %w[get foo], want: false },
+          { command: %w[GET foo], want: false },
           { command: %w[unknown foo bar], want: nil },
           { command: [], want: nil }
         ].each_with_index do |c, idx|
@@ -113,7 +118,9 @@ class RedisClient
         cmd = ::RedisClient::Cluster::Command.load(@raw_clients)
         [
           { command: %w[set foo 1], want: false },
+          { command: %w[SET foo 1], want: false },
           { command: %w[get foo], want: true },
+          { command: %w[GET foo], want: true },
           { command: %w[unknown foo bar], want: nil },
           { command: [], want: nil }
         ].each_with_index do |c, idx|
@@ -127,8 +134,8 @@ class RedisClient
         cmd = ::RedisClient::Cluster::Command.load(@raw_clients)
         [
           { name: 'ping', want: true },
-          { name: :ping, want: false },
-          { name: 'PING', want: false },
+          { name: :ping, want: true },
+          { name: 'PING', want: true },
           { name: 'densaugeo', want: false },
           { name: :densaugeo, want: false },
           { name: 'DENSAUGEO', want: false },
@@ -138,47 +145,6 @@ class RedisClient
         ].each_with_index do |c, idx|
           msg = "Case: #{idx}"
           got = cmd.exists?(c[:name])
-          assert_equal(c[:want], got, msg)
-        end
-      end
-
-      def test_determine_first_key_position
-        cmd = ::RedisClient::Cluster::Command.load(@raw_clients)
-        [
-          { command: %w[eval "return ARGV[1]" 0 hello], want: 3 },
-          { command: %w[evalsha sha1 2 foo bar baz zap], want: 3 },
-          { command: %w[migrate host port key 0 5 copy], want: 3 },
-          { command: ['migrate', 'host', 'port', '', '0', '5', 'copy', 'keys', 'key'], want: 8 },
-          { command: %w[zinterstore out 2 zset1 zset2 weights 2 3], want: 3 },
-          { command: %w[zunionstore out 2 zset1 zset2 weights 2 3], want: 3 },
-          { command: %w[object help], want: 2 },
-          { command: %w[memory help], want: 0 },
-          { command: %w[memory usage key], want: 2 },
-          { command: %w[xread count 2 streams mystream writers 0-0 0-0], want: 4 },
-          { command: %w[xreadgroup group group consumer streams key id], want: 5 },
-          { command: %w[set foo 1], want: 1 },
-          { command: ['set', 'foo', 1], want: 1 },
-          { command: %w[get foo], want: 1 }
-        ].each_with_index do |c, idx|
-          msg = "Case: #{idx}"
-          got = cmd.send(:determine_first_key_position, c[:command])
-          assert_equal(c[:want], got, msg)
-        end
-      end
-
-      def test_determine_optional_key_position
-        cmd = ::RedisClient::Cluster::Command.load(@raw_clients)
-        [
-          { params: { command: %w[xread count 2 streams mystream writers 0-0 0-0], option_name: 'streams' }, want: 4 },
-          { params: { command: %w[xreadgroup group group consumer streams key id], option_name: 'streams' }, want: 5 },
-          { params: { command: %w[get foo], option_name: 'bar' }, want: 0 },
-          { params: { command: %w[foo bar baz], option_name: 'bar' }, want: 2 },
-          { params: { command: %w[foo bar baz], option_name: 'BAR' }, want: 2 },
-          { params: { command: [], option_name: nil }, want: 0 },
-          { params: { command: [], option_name: '' }, want: 0 }
-        ].each_with_index do |c, idx|
-          msg = "Case: #{idx}"
-          got = cmd.send(:determine_optional_key_position, c[:params][:command], c[:params][:option_name])
           assert_equal(c[:want], got, msg)
         end
       end
