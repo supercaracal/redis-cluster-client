@@ -90,7 +90,17 @@ class RedisClient
       end
 
       def determine_first_key_position(command) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/AbcSize, Metrics/PerceivedComplexity
-        if command.first.casecmp('eval').zero?
+        if command.first.casecmp('get').zero?
+          find_command_info(command.first)&.first_key_position.to_i
+        elsif command.first.casecmp('mget').zero?
+          find_command_info(command.first)&.first_key_position.to_i
+        elsif command.first.casecmp('set').zero?
+          find_command_info(command.first)&.first_key_position.to_i
+        elsif command.first.casecmp('mset').zero?
+          find_command_info(command.first)&.first_key_position.to_i
+        elsif command.first.casecmp('del').zero?
+          find_command_info(command.first)&.first_key_position.to_i
+        elsif command.first.casecmp('eval').zero?
           3
         elsif command.first.casecmp('evalsha').zero?
           3
