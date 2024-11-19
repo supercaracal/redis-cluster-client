@@ -80,13 +80,13 @@ class RedisClient
       end
 
       def exists?(name)
-        @commands.key?(name) || @commands.key?(name.to_s.downcase)
+        @commands.key?(name) || @commands.key?(name.to_s.downcase(:ascii))
       end
 
       private
 
       def find_command_info(name)
-        @commands[name] || @commands[name.to_s.downcase]
+        @commands[name] || @commands[name.to_s.downcase(:ascii)]
       end
 
       def determine_first_key_position(command) # rubocop:disable Metrics/CyclomaticComplexity, Metrics/AbcSize, Metrics/PerceivedComplexity
