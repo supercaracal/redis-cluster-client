@@ -82,13 +82,12 @@ class RedisClient
       def test_extract_first_key
         cmd = ::RedisClient::Cluster::Command.load(@raw_clients)
         [
-          { command: %w[SET foo 1], want: 'foo' },
-          { command: %w[GET foo], want: 'foo' },
-          { command: %w[GET foo{bar}baz], want: 'foo{bar}baz' },
-          { command: %w[MGET foo bar baz], want: 'foo' },
-          { command: %w[UNKNOWN foo bar], want: '' },
-          { command: [], want: '' },
-          { command: nil, want: '' }
+          { command: %w[set foo 1], want: 'foo' },
+          { command: %w[get foo], want: 'foo' },
+          { command: %w[get foo{bar}baz], want: 'foo{bar}baz' },
+          { command: %w[mget foo bar baz], want: 'foo' },
+          { command: %w[unknown foo bar], want: '' },
+          { command: [], want: '' }
         ].each_with_index do |c, idx|
           msg = "Case: #{idx}"
           got = cmd.extract_first_key(c[:command])
@@ -99,11 +98,10 @@ class RedisClient
       def test_should_send_to_primary?
         cmd = ::RedisClient::Cluster::Command.load(@raw_clients)
         [
-          { command: %w[SET foo 1], want: true },
-          { command: %w[GET foo], want: false },
-          { command: %w[UNKNOWN foo bar], want: nil },
-          { command: [], want: nil },
-          { command: nil, want: nil }
+          { command: %w[set foo 1], want: true },
+          { command: %w[get foo], want: false },
+          { command: %w[unknown foo bar], want: nil },
+          { command: [], want: nil }
         ].each_with_index do |c, idx|
           msg = "Case: #{idx}"
           got = cmd.should_send_to_primary?(c[:command])
@@ -114,11 +112,10 @@ class RedisClient
       def test_should_send_to_replica?
         cmd = ::RedisClient::Cluster::Command.load(@raw_clients)
         [
-          { command: %w[SET foo 1], want: false },
-          { command: %w[GET foo], want: true },
-          { command: %w[UNKNOWN foo bar], want: nil },
-          { command: [], want: nil },
-          { command: nil, want: nil }
+          { command: %w[set foo 1], want: false },
+          { command: %w[get foo], want: true },
+          { command: %w[unknown foo bar], want: nil },
+          { command: [], want: nil }
         ].each_with_index do |c, idx|
           msg = "Case: #{idx}"
           got = cmd.should_send_to_replica?(c[:command])
@@ -130,8 +127,8 @@ class RedisClient
         cmd = ::RedisClient::Cluster::Command.load(@raw_clients)
         [
           { name: 'ping', want: true },
-          { name: :ping, want: true },
-          { name: 'PING', want: true },
+          { name: :ping, want: false },
+          { name: 'PING', want: false },
           { name: 'densaugeo', want: false },
           { name: :densaugeo, want: false },
           { name: 'DENSAUGEO', want: false },
@@ -148,21 +145,20 @@ class RedisClient
       def test_determine_first_key_position
         cmd = ::RedisClient::Cluster::Command.load(@raw_clients)
         [
-          { command: %w[EVAL "return ARGV[1]" 0 hello], want: 3 },
-          { command: %w[EVALSHA sha1 2 foo bar baz zap], want: 3 },
-          { command: %w[MIGRATE host port key 0 5 COPY], want: 3 },
-          { command: ['MIGRATE', 'host', 'port', '', '0', '5', 'COPY', 'KEYS', 'key'], want: 8 },
-          { command: %w[ZINTERSTORE out 2 zset1 zset2 WEIGHTS 2 3], want: 3 },
-          { command: %w[ZUNIONSTORE out 2 zset1 zset2 WEIGHTS 2 3], want: 3 },
-          { command: %w[OBJECT HELP], want: 2 },
-          { command: %w[MEMORY HELP], want: 0 },
-          { command: %w[MEMORY USAGE key], want: 2 },
-          { command: %w[XREAD COUNT 2 STREAMS mystream writers 0-0 0-0], want: 4 },
-          { command: %w[XREADGROUP GROUP group consumer STREAMS key id], want: 5 },
-          { command: %w[SET foo 1], want: 1 },
+          { command: %w[eval "return ARGV[1]" 0 hello], want: 3 },
+          { command: %w[evalsha sha1 2 foo bar baz zap], want: 3 },
+          { command: %w[migrate host port key 0 5 copy], want: 3 },
+          { command: ['migrate', 'host', 'port', '', '0', '5', 'copy', 'keys', 'key'], want: 8 },
+          { command: %w[zinterstore out 2 zset1 zset2 weights 2 3], want: 3 },
+          { command: %w[zunionstore out 2 zset1 zset2 weights 2 3], want: 3 },
+          { command: %w[object help], want: 2 },
+          { command: %w[memory help], want: 0 },
+          { command: %w[memory usage key], want: 2 },
+          { command: %w[xread count 2 streams mystream writers 0-0 0-0], want: 4 },
+          { command: %w[xreadgroup group group consumer streams key id], want: 5 },
           { command: %w[set foo 1], want: 1 },
-          { command: ['SET', 'foo', 1], want: 1 },
-          { command: %w[GET foo], want: 1 }
+          { command: ['set', 'foo', 1], want: 1 },
+          { command: %w[get foo], want: 1 }
         ].each_with_index do |c, idx|
           msg = "Case: #{idx}"
           got = cmd.send(:determine_first_key_position, c[:command])
@@ -173,11 +169,11 @@ class RedisClient
       def test_determine_optional_key_position
         cmd = ::RedisClient::Cluster::Command.load(@raw_clients)
         [
-          { params: { command: %w[XREAD COUNT 2 STREAMS mystream writers 0-0 0-0], option_name: 'streams' }, want: 4 },
-          { params: { command: %w[XREADGROUP GROUP group consumer STREAMS key id], option_name: 'streams' }, want: 5 },
-          { params: { command: %w[GET foo], option_name: 'bar' }, want: 0 },
-          { params: { command: %w[FOO BAR BAZ], option_name: 'bar' }, want: 2 },
-          { params: { command: %w[FOO BAR BAZ], option_name: 'BAR' }, want: 2 },
+          { params: { command: %w[xread count 2 streams mystream writers 0-0 0-0], option_name: 'streams' }, want: 4 },
+          { params: { command: %w[xreadgroup group group consumer streams key id], option_name: 'streams' }, want: 5 },
+          { params: { command: %w[get foo], option_name: 'bar' }, want: 0 },
+          { params: { command: %w[foo bar baz], option_name: 'bar' }, want: 2 },
+          { params: { command: %w[foo bar baz], option_name: 'BAR' }, want: 2 },
           { params: { command: [], option_name: nil }, want: 0 },
           { params: { command: [], option_name: '' }, want: 0 }
         ].each_with_index do |c, idx|

@@ -3,7 +3,6 @@
 require 'redis_client'
 require 'redis_client/cluster/errors'
 require 'redis_client/cluster/key_slot_converter'
-require 'redis_client/cluster/normalized_cmd_name'
 
 class RedisClient
   class Cluster
@@ -30,7 +29,7 @@ class RedisClient
           nodes&.each do |node|
             regular_timeout = node.read_timeout
             node.read_timeout = slow_command_timeout > 0.0 ? slow_command_timeout : regular_timeout
-            reply = node.call('COMMAND')
+            reply = node.call('command')
             node.read_timeout = regular_timeout
             commands = parse_command_reply(reply)
             cmd = ::RedisClient::Cluster::Command.new(commands)
@@ -73,23 +72,21 @@ class RedisClient
       end
 
       def should_send_to_primary?(command)
-        name = ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_command(command)
-        @commands[name]&.write?
+        @commands[command.first]&.write?
       end
 
       def should_send_to_replica?(command)
-        name = ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_command(command)
-        @commands[name]&.readonly?
+        @commands[command.first]&.readonly?
       end
 
       def exists?(name)
-        @commands.key?(::RedisClient::Cluster::NormalizedCmdName.instance.get_by_name(name))
+        @commands.key?(name)
       end
 
       private
 
       def determine_first_key_position(command) # rubocop:disable Metrics/CyclomaticComplexity
-        case name = ::RedisClient::Cluster::NormalizedCmdName.instance.get_by_command(command)
+        case command.first
         when 'eval', 'evalsha', 'zinterstore', 'zunionstore' then 3
         when 'object' then 2
         when 'memory'
@@ -99,7 +96,7 @@ class RedisClient
         when 'xread', 'xreadgroup'
           determine_optional_key_position(command, 'streams')
         else
-          @commands[name]&.first_key_position.to_i
+          @commands[command.first]&.first_key_position.to_i
         end
       end
 

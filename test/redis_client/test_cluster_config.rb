@@ -100,7 +100,7 @@ class RedisClient
     end
 
     def test_command_builder
-      assert_equal(::RedisClient::CommandBuilder, ::RedisClient::ClusterConfig.new.command_builder)
+      assert_equal(::RedisClient::Cluster::CommandBuilder, ::RedisClient::ClusterConfig.new.command_builder)
     end
 
     def test_build_node_configs

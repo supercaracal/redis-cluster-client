@@ -63,9 +63,7 @@ module ProfMem
     end
   end
 
-  def prepare
-    ::RedisClient::Cluster::NormalizedCmdName.instance.clear
-  end
+  def prepare; end
 
   def print_letter(title, sub_titile)
     print "################################################################################\n"
