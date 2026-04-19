@@ -164,9 +164,9 @@ class RedisClient
         raise
       rescue ::RedisClient::ConnectionError => e
         raise unless ::RedisClient::Cluster::ErrorIdentification.client_owns_error?(e, node)
+        raise unless renew_cluster_state
 
         retry_count -= 1
-        raise unless renew_cluster_state
 
         if retry_count >= 0
           # Find the node to use for this command - if this fails for some reason, though, re-use
@@ -178,7 +178,6 @@ class RedisClient
           retry
         end
 
-        retry if retry_count >= 0
         raise
       end
 
@@ -498,8 +497,7 @@ class RedisClient
       def handle_node_reload_error(retry_count: 1)
         yield
       rescue ::RedisClient::Cluster::Node::ReloadNeeded
-        raise ::RedisClient::Cluster::NodeMightBeDown.new.with_config(@config) if retry_count <= 0
-        raise unless renew_cluster_state
+        raise ::RedisClient::Cluster::NodeMightBeDown.new.with_config(@config) if retry_count <= 0 || !renew_cluster_state
 
         retry_count -= 1
         retry
