@@ -106,8 +106,6 @@ class RedisClient
         @topology = klass.new(pool, @concurrent_worker, **kwargs)
         @config = config
         @mutex = Mutex.new
-        @last_reloaded_at = nil
-        @reload_times = 0
         @random = Random.new
       end
 
@@ -204,17 +202,26 @@ class RedisClient
       end
 
       def reload!
-        with_reload_lock do
-          with_startup_clients(@config.max_startup_sample) do |startup_clients|
-            @node_info = refetch_node_info_list(startup_clients)
-            @node_configs = @node_info.to_h do |node_info|
-              [node_info.node_key, @config.client_config_for_node(node_info.node_key)]
-            end
-            @slots = build_slot_node_mappings(@node_info)
-            @replications = build_replication_mappings(@node_info)
-            @topology.process_topology_update!(@replications, @node_configs)
+        # What should happen with concurrent calls #reload! This is a realistic possibility if the cluster goes into
+        # a CLUSTERDOWN state, and we're using a pooled backend. Every thread will independently discover this, and
+        # call reload!.
+        # For now, if a reload is in progress, wait for that to complete, and consider that the same as us having
+        # performed the reload.
+        # Probably in the future we should add a circuit breaker to #reload itself, and stop trying if the cluster is
+        # obviously not working.
+        return unless @mutex.try_lock
+
+        with_startup_clients(@config.max_startup_sample) do |startup_clients|
+          @node_info = refetch_node_info_list(startup_clients)
+          @node_configs = @node_info.to_h do |node_info|
+            [node_info.node_key, @config.client_config_for_node(node_info.node_key)]
           end
+          @slots = build_slot_node_mappings(@node_info)
+          @replications = build_replication_mappings(@node_info)
+          @topology.process_topology_update!(@replications, @node_configs)
         end
+      ensure
+        @mutex.unlock if @mutex.owned?
       end
 
       private
@@ -455,36 +462,6 @@ class RedisClient
           @topology.process_topology_update!({}, @config.startup_nodes) if @topology.clients.empty?
           yield @topology.clients.values.sample(count)
         end
-      end
-
-      def with_reload_lock
-        # What should happen with concurrent calls #reload? This is a realistic possibility if the cluster goes into
-        # a CLUSTERDOWN state, and we're using a pooled backend. Every thread will independently discover this, and
-        # call reload!.
-        # For now, if a reload is in progress, wait for that to complete, and consider that the same as us having
-        # performed the reload.
-        # Probably in the future we should add a circuit breaker to #reload itself, and stop trying if the cluster is
-        # obviously not working.
-        wait_start = obtain_current_time
-        @mutex.synchronize do
-          return if @last_reloaded_at && @last_reloaded_at > wait_start
-
-          if @last_reloaded_at && @reload_times > 1
-            # Mitigate load of servers by naive logic. Don't sleep with exponential backoff.
-            now = obtain_current_time
-            elapsed = @last_reloaded_at + @random.rand(STATE_REFRESH_INTERVAL) * 1_000_000
-            return if now < elapsed
-          end
-
-          r = yield
-          @last_reloaded_at = obtain_current_time
-          @reload_times += 1
-          r
-        end
-      end
-
-      def obtain_current_time
-        Process.clock_gettime(Process::CLOCK_MONOTONIC, :microsecond)
       end
     end
   end
