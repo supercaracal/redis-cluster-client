@@ -767,7 +767,7 @@ class RedisClient
 
         # When we reload, it will only call CLUSTER NODES against a single node, the bootstrap node.
         capture_buffer.clear
-        test_node.try_reload!
+        test_node.send(:bypass_reload!)
 
         cluster_node_cmds = capture_buffer.to_a.select { |c| c.command == %w[cluster nodes] }
         assert_equal 1, cluster_node_cmds.size

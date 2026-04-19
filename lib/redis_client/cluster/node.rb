@@ -204,14 +204,10 @@ class RedisClient
 
       def try_reload!
         with_reload_lock do
-          with_startup_clients(@config.max_startup_sample) do |startup_clients|
-            @node_info = refetch_node_info_list(startup_clients)
-            @node_configs = @node_info.to_h do |node_info|
-              [node_info.node_key, @config.client_config_for_node(node_info.node_key)]
+          with_reload_jitter do
+            with_startup_clients(@config.max_startup_sample) do |clients|
+              reload!(clients)
             end
-            @slots = build_slot_node_mappings(@node_info)
-            @replications = build_replication_mappings(@node_info)
-            @topology.process_topology_update!(@replications, @node_configs)
           end
         end
       end
@@ -431,6 +427,17 @@ class RedisClient
         "#{hostname}:#{port}"
       end
 
+      def reload!(clients)
+        @node_info = refetch_node_info_list(clients)
+        @node_configs = @node_info.to_h do |node_info|
+          [node_info.node_key, @config.client_config_for_node(node_info.node_key)]
+        end
+        @slots = build_slot_node_mappings(@node_info)
+        @replications = build_replication_mappings(@node_info)
+        @topology.process_topology_update!(@replications, @node_configs)
+        true
+      end
+
       def with_startup_clients(count) # rubocop:disable Metrics/AbcSize
         if @config.connect_with_original_config
           # If connect_with_original_config is set, that means we need to build actual client objects
@@ -456,6 +463,14 @@ class RedisClient
         end
       end
 
+      def with_reload_jitter
+        return false unless @next_reload_time.nil? || obtain_current_time >= @next_reload_time
+
+        result = yield
+        @next_reload_time = obtain_current_time + @random.rand(JITTER_RANGE)
+        result
+      end
+
       def with_reload_lock
         # What should happen with concurrent calls #try_reload! This is a realistic possibility if the cluster goes into
         # a CLUSTERDOWN state, and we're using a pooled backend. Every thread will independently discover this, and
@@ -465,18 +480,23 @@ class RedisClient
         # Probably in the future we should add a circuit breaker to #try_reload! itself, and stop trying if the cluster is
         # obviously not working.
         return false unless @mutex.try_lock
-        return false unless @next_reload_time.nil? || obtain_current_time >= @next_reload_time
 
         yield
-
-        @next_reload_time = obtain_current_time + @random.rand(JITTER_RANGE)
-        true
       ensure
         @mutex.unlock if @mutex.owned?
       end
 
       def obtain_current_time
         Process.clock_gettime(Process::CLOCK_MONOTONIC, :microsecond)
+      end
+
+      def bypass_reload!
+        # DO NOT USE THIS METHOD
+        with_reload_lock do
+          with_startup_clients(@config.max_startup_sample) do |clients|
+            reload!(clients)
+          end
+        end
       end
     end
   end
