@@ -465,7 +465,7 @@ class RedisClient
         # Probably in the future we should add a circuit breaker to #try_reload! itself, and stop trying if the cluster is
         # obviously not working.
         return false unless @mutex.try_lock
-        return false unless @next_reload_time.nil? || obtain_current_time < @next_reload_time
+        return false unless @next_reload_time.nil? || obtain_current_time >= @next_reload_time
 
         yield
 
