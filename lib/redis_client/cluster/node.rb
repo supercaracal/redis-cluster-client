@@ -200,15 +200,15 @@ class RedisClient
         @mutex.unlock if @mutex.owned?
       end
 
-      def reload!
-        # What should happen with concurrent calls #reload! This is a realistic possibility if the cluster goes into
+      def try_reload!
+        # What should happen with concurrent calls #try_reload! This is a realistic possibility if the cluster goes into
         # a CLUSTERDOWN state, and we're using a pooled backend. Every thread will independently discover this, and
-        # call reload!.
+        # call #try_reload!.
         # For now, if a reload is in progress, wait for that to complete, and consider that the same as us having
         # performed the reload.
         # Probably in the future we should add a circuit breaker to #reload itself, and stop trying if the cluster is
         # obviously not working.
-        return unless @mutex.try_lock
+        return false unless @mutex.try_lock
 
         with_startup_clients(@config.max_startup_sample) do |startup_clients|
           @node_info = refetch_node_info_list(startup_clients)
@@ -219,6 +219,8 @@ class RedisClient
           @replications = build_replication_mappings(@node_info)
           @topology.process_topology_update!(@replications, @node_configs)
         end
+
+        true
       ensure
         @mutex.unlock if @mutex.owned?
       end
